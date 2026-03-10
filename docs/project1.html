@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project 1 — Bare Metal QEMU | RISC-V Bare-Metal</title>
+<style>
+  :root {
+    --dark:#1f2937; --teal:#0f766e; --teal2:#134e4a;
+    --light:#f0fdf4; --code:#f0f4f8; --muted:#6b7280;
+    --border:#d1d5db; --text:#374151; --yellow:#fbbf24;
+    --purple:#4c1d95;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f9fafb;color:var(--text)}
+  header{background:linear-gradient(135deg,var(--dark) 0%,#134e4a 100%);color:white;padding:48px 24px 40px;text-align:center}
+  header .crumb{font-size:.85rem;color:#9ca3af;margin-bottom:10px}
+  header .crumb a{color:#34d399;text-decoration:none}
+  header h1{font-size:2.2rem;font-weight:800;margin-bottom:10px}
+  header p{font-size:1rem;color:#9ca3af;max-width:600px;margin:0 auto}
+  nav{background:white;border-bottom:1px solid var(--border);display:flex;justify-content:center;gap:0;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+  nav a{padding:14px 20px;font-size:.9rem;font-weight:600;color:var(--muted);text-decoration:none;border-bottom:3px solid transparent;transition:all .2s}
+  nav a:hover,nav a.active{color:var(--teal);border-bottom-color:var(--teal)}
+  .layout{max-width:1100px;margin:0 auto;padding:40px 24px;display:grid;grid-template-columns:220px 1fr;gap:40px}
+  @media(max-width:768px){.layout{grid-template-columns:1fr}.toc{display:none}}
+  .toc{position:sticky;top:72px;align-self:start}
+  .toc h4{font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px}
+  .toc a{display:block;font-size:.85rem;color:var(--muted);text-decoration:none;padding:5px 0;border-left:2px solid var(--border);padding-left:12px;transition:all .2s}
+  .toc a:hover,.toc a.active{color:var(--teal);border-left-color:var(--teal)}
+  .content h2{font-size:1.55rem;color:var(--dark);margin:48px 0 10px;padding-top:8px}
+  .content h2:first-child{margin-top:0}
+  .content h3{font-size:1.1rem;color:var(--teal2);margin:28px 0 8px}
+  .content p{line-height:1.7;margin-bottom:12px}
+  pre{background:var(--dark);color:#e2e8f0;border-radius:10px;padding:20px 24px;margin:16px 0;font-family:'Courier New',monospace;font-size:.85rem;line-height:1.7;overflow-x:auto}
+  pre .c{color:#6b7280} pre .k{color:#f9d71c;font-weight:bold}
+  pre .s{color:#34d399} pre .t{color:#93c5fd}
+  pre .a{color:#fca5a5} pre .n{color:#e2e8f0}
+  code{background:var(--code);color:var(--teal);font-family:'Courier New',monospace;font-size:.85em;padding:2px 6px;border-radius:4px}
+  .callout{border-left:4px solid var(--teal);background:var(--light);padding:14px 18px;border-radius:0 8px 8px 0;margin:20px 0;font-size:.92rem;line-height:1.6}
+  .callout.warn{border-left-color:#f59e0b;background:#fffbeb}
+  .callout.info{border-left-color:#3b82f6;background:#eff6ff}
+  .step-header{background:var(--dark);color:white;border-radius:10px 10px 0 0;padding:14px 20px;display:flex;align-items:center;gap:12px;margin-top:32px}
+  .step-num{background:var(--teal);color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0}
+  .step-header h3{color:white;margin:0;font-size:1rem}
+  .step-body{background:white;border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:20px 24px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.9rem}
+  th{background:var(--dark);color:white;padding:10px 14px;text-align:left}
+  td{padding:9px 14px;border-bottom:1px solid var(--border)}
+  tr:nth-child(even) td{background:#f9fafb}
+  td code{background:var(--code);color:var(--purple)}
+  .file-tree{background:var(--dark);color:#e2e8f0;border-radius:10px;padding:20px 24px;font-family:'Courier New',monospace;font-size:.88rem;line-height:1.9}
+  .file-tree .dir{color:#f9d71c} .file-tree .file{color:#34d399} .file-tree .note{color:#6b7280}
+  footer{background:var(--dark);color:#9ca3af;text-align:center;padding:32px 24px;font-size:.88rem;margin-top:60px}
+  footer a{color:#34d399;text-decoration:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumb"><a href="index.html">← Home</a> / Project 1</div>
+  <h1>Project 1 — Bare Metal QEMU</h1>
+  <p>The simplest possible bare-metal RV64I program: stack setup, arithmetic, a loop — all debuggable step-by-step in Eclipse CDT.</p>
+</header>
+
+<nav>
+  <a href="index.html">Home</a>
+  <a href="project1.html" class="active">Bare Metal</a>
+  <a href="project2.html">ZSBL + Supervisor</a>
+  <a href="reset-vector.html">Reset Vector</a>
+</nav>
+
+<div class="layout">
+<aside class="toc">
+  <h4>On This Page</h4>
+  <a href="#overview">Overview</a>
+  <a href="#files">Project Files</a>
+  <a href="#main-s">main.S — Line by Line</a>
+  <a href="#linker">linker.ld</a>
+  <a href="#makefile">Makefile</a>
+  <a href="#build-run">Build &amp; Run</a>
+  <a href="#eclipse">Eclipse Debug Setup</a>
+  <a href="#gdb-commands">GDB Commands</a>
+</aside>
+
+<main class="content">
+
+<h2 id="overview">Overview</h2>
+<p>This project is the absolute minimum needed to run RISC-V assembly on QEMU and step through it with a debugger. There is no C runtime, no operating system, and no external firmware. The program:</p>
+<ul style="padding-left:20px;margin:10px 0 16px;line-height:1.9">
+  <li>Sets the stack pointer to a safe address</li>
+  <li>Adds two numbers (10 + 20 = 30) into registers</li>
+  <li>Runs a 5-iteration count loop</li>
+  <li>Spins forever at <code>done:</code></li>
+</ul>
+<div class="callout">
+  <strong>What you will learn:</strong> how the QEMU reset vector jumps to your code, how to write a linker script, how to assemble and link without GCC, and how to connect Eclipse CDT to QEMU's GDB stub.
+</div>
+
+<h2 id="files">Project Files</h2>
+<div class="file-tree">
+<span class="dir">bare_metal_qemu/</span>
+├── <span class="file">main.S</span>        <span class="note"># the entire program — 20 lines of RV64I assembly</span>
+├── <span class="file">linker.ld</span>     <span class="note"># places .text at 0x80000000</span>
+└── <span class="file">Makefile</span>      <span class="note"># build + QEMU launch targets</span>
+</div>
+
+<h2 id="main-s">main.S — Line by Line</h2>
+
+<pre><span class="c"># Tell the assembler this belongs in the .text section</span>
+<span class="k">.section .text</span>
+<span class="k">.global _start</span>           <span class="c"># make _start visible to the linker</span>
+
+<span class="t">_start:</span>
+    <span class="s">li</span>  sp, 0x80010000    <span class="c"># sp = 0x80010000 (64 KB above code)</span>
+                           <span class="c"># MUST be done before any call instruction</span>
+                           <span class="c"># call pushes return address on the stack</span>
+    <span class="s">call</span> main             <span class="c"># ra = halt, PC = main</span>
+
+<span class="t">halt:</span>
+    <span class="s">j</span> halt                <span class="c"># infinite loop if main returns (it won't)</span>
+
+<span class="k">.global main</span>
+<span class="t">main:</span>
+    <span class="s">li</span>  a0, 10            <span class="c"># a0 = 10  (first function argument register)</span>
+    <span class="s">li</span>  a1, 20            <span class="c"># a1 = 20  (second function argument register)</span>
+    <span class="s">add</span> a2, a0, a1        <span class="c"># a2 = a0 + a1 = 30</span>
+
+    <span class="s">li</span>  t0, 0             <span class="c"># t0 = loop counter, starts at 0</span>
+    <span class="s">li</span>  t1, 5             <span class="c"># t1 = loop limit</span>
+<span class="t">loop:</span>
+    <span class="s">addi</span> t0, t0, 1        <span class="c"># t0 = t0 + 1</span>
+    <span class="s">blt</span>  t0, t1, loop     <span class="c"># branch back if t0 &lt; 5</span>
+                           <span class="c"># (runs 5 times: t0 goes 1,2,3,4,5 then falls through)</span>
+<span class="t">done:</span>
+    <span class="s">j</span> done                <span class="c"># set Eclipse breakpoint here to inspect registers</span>
+</pre>
+
+<h3>Register State at <code>done:</code></h3>
+<table>
+  <tr><th>Register</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>a0</code></td><td>10</td><td>First operand</td></tr>
+  <tr><td><code>a1</code></td><td>20</td><td>Second operand</td></tr>
+  <tr><td><code>a2</code></td><td>30</td><td>Sum (10 + 20)</td></tr>
+  <tr><td><code>t0</code></td><td>5</td><td>Final loop counter value</td></tr>
+  <tr><td><code>t1</code></td><td>5</td><td>Loop limit (unchanged)</td></tr>
+  <tr><td><code>sp</code></td><td>0x80010000</td><td>Stack pointer</td></tr>
+  <tr><td><code>ra</code></td><td>addr of <code>halt</code></td><td>Return address saved by <code>call</code></td></tr>
+</table>
+
+<h2 id="linker">linker.ld</h2>
+<pre><span class="t">ENTRY</span>(_start)         <span class="c">/* linker entry symbol — where execution begins */</span>
+
+<span class="t">MEMORY</span> {
+  RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 128M
+}                      <span class="c">/* QEMU virt DRAM always starts at 0x80000000 */</span>
+
+<span class="t">SECTIONS</span> {
+  .text 0x80000000 : {
+    *(.text)            <span class="c">/* all .text sections from all object files */</span>
+    *(.text.*)
+  } &gt; RAM
+
+  .data : { *(.data) *(.data.*) } &gt; RAM
+  .bss  : { *(.bss)  *(.bss.*)  } &gt; RAM
+}</pre>
+<div class="callout info">The <code>ENTRY(_start)</code> line is what tells QEMU the ELF entry point. QEMU reads this from the ELF header (<code>e_entry</code>) and writes it into the MROM data word at <code>0x1018</code> so the reset vector can jump there.</div>
+
+<h2 id="makefile">Makefile</h2>
+<pre><span class="t">CROSS</span>   = riscv64-unknown-elf-
+<span class="t">AS</span>      = $(CROSS)as
+<span class="t">LD</span>      = $(CROSS)ld        <span class="c"># use ld directly — NOT gcc</span>
+
+<span class="t">ASFLAGS</span> = -g -march=rv64i -mabi=lp64
+<span class="t">LDFLAGS</span> = -T linker.ld -nostdlib
+
+<span class="t">all:</span> main.elf
+
+main.elf: main.o
+    $(LD) $(LDFLAGS) -o $@ $^
+
+main.o: main.S
+    $(AS) $(ASFLAGS) -o $@ $&lt;
+
+<span class="t">qemu-run:</span> all
+    qemu-system-riscv64 -machine virt -nographic -bios none -kernel main.elf
+
+<span class="t">qemu:</span> all            <span class="c"># paused — waiting for GDB on :1234</span>
+    qemu-system-riscv64 -machine virt -nographic -bios none -kernel main.elf -s -S</pre>
+
+<div class="callout warn"><strong>Why <code>-bios none</code>?</strong> Without it QEMU loads OpenSBI which puts your code in S-mode. Since this project runs in M-mode and uses M-mode CSRs that would cause illegal instruction faults. <code>-bios none</code> skips OpenSBI so the reset vector jumps directly to your <code>_start</code>.</div>
+
+<h2 id="build-run">Build &amp; Run</h2>
+
+<div class="step-header"><span class="step-num">1</span><h3>Clone &amp; build</h3></div>
+<div class="step-body">
+<pre><span class="s">git clone https://github.com/YOUR_USERNAME/riscv-bare-metal-qemu.git</span>
+<span class="s">cd riscv-bare-metal-qemu/bare_metal_qemu</span>
+<span class="s">make</span>
+<span class="c"># Output: main.elf  (entry point 0x80000000)</span></pre>
+<p>Verify the entry point is correct:</p>
+<pre><span class="s">riscv64-unknown-elf-readelf -h main.elf | grep "Entry"</span>
+<span class="c"># Entry point address: 0x80000000</span></pre>
+</div>
+
+<div class="step-header"><span class="step-num">2</span><h3>Run without debugger</h3></div>
+<div class="step-body">
+<pre><span class="s">make qemu-run</span>
+<span class="c"># QEMU starts, program runs, loops silently at 'done:'</span>
+<span class="c"># No UART output (project has no UART code)</span>
+<span class="c"># Press Ctrl-A then X to quit QEMU</span></pre>
+</div>
+
+<div class="step-header"><span class="step-num">3</span><h3>Run with GDB (terminal)</h3></div>
+<div class="step-body">
+<pre><span class="c"># Terminal 1 — start QEMU paused</span>
+<span class="s">make qemu</span>
+
+<span class="c"># Terminal 2 — connect GDB</span>
+<span class="s">gdb-multiarch main.elf</span>
+<span class="s">(gdb) set architecture riscv:rv64</span>
+<span class="s">(gdb) target remote localhost:1234</span>
+<span class="s">(gdb) break _start</span>
+<span class="s">(gdb) continue</span>
+<span class="s">(gdb) stepi</span>   <span class="c"># step one instruction at a time</span>
+<span class="s">(gdb) info registers</span></pre>
+</div>
+
+<h2 id="eclipse">Eclipse CDT Debug Setup</h2>
+
+<div class="step-header"><span class="step-num">1</span><h3>Create the Eclipse project</h3></div>
+<div class="step-body">
+<p>File → New → Makefile Project → Empty Project → Cross GCC. Name it <code>bare_metal_qemu</code>. Set the project location to the <code>bare_metal_qemu/</code> folder from the cloned repo.</p>
+</div>
+
+<div class="step-header"><span class="step-num">2</span><h3>Configure the builder</h3></div>
+<div class="step-body">
+<p>Right-click project → Properties → C/C++ Build:</p>
+<ul style="padding-left:18px;line-height:2;margin-top:8px">
+  <li>Uncheck <strong>Generate Makefiles automatically</strong></li>
+  <li>Build directory: <code>${workspace_loc:/bare_metal_qemu}</code></li>
+  <li>Build command: <code>make</code> (no quotes)</li>
+  <li>Environment → PATH: add your toolchain <code>bin/</code> folder</li>
+</ul>
+</div>
+
+<div class="step-header"><span class="step-num">3</span><h3>Create debug configuration</h3></div>
+<div class="step-body">
+<p>Run → Debug Configurations → <strong>GDB Hardware Debugging</strong> → New:</p>
+<table>
+  <tr><th>Tab</th><th>Setting</th><th>Value</th></tr>
+  <tr><td>Main</td><td>C/C++ Application</td><td><code>main.elf</code></td></tr>
+  <tr><td>Main</td><td>Disable auto build</td><td>☑ checked</td></tr>
+  <tr><td>Debugger</td><td>GDB Command</td><td><code>/usr/bin/gdb-multiarch</code></td></tr>
+  <tr><td>Debugger</td><td>Use remote target</td><td>☑ checked</td></tr>
+  <tr><td>Debugger</td><td>Host / Port</td><td><code>localhost</code> / <code>1234</code></td></tr>
+  <tr><td>Startup</td><td>Init commands</td><td><code>set architecture riscv:rv64</code></td></tr>
+  <tr><td>Startup</td><td>Load symbols</td><td><code>main.elf</code></td></tr>
+  <tr><td>Startup</td><td>Set breakpoint at</td><td><code>_start</code></td></tr>
+  <tr><td>Startup</td><td>Resume</td><td>☑ checked</td></tr>
+</table>
+</div>
+
+<div class="step-header"><span class="step-num">4</span><h3>Debug session</h3></div>
+<div class="step-body">
+<pre><span class="c"># Terminal — start QEMU paused (must be running before F11)</span>
+<span class="s">make qemu</span>
+
+<span class="c"># Eclipse — press F11 (Debug)</span>
+<span class="c"># GDB connects, stops at _start</span>
+<span class="c"># F6 = Step Over, F5 = Step Into, F8 = Resume</span>
+<span class="c"># Registers panel: Window → Show View → Registers</span></pre>
+</div>
+
+<h2 id="gdb-commands">Useful GDB Console Commands</h2>
+<table>
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>-exec info registers</code></td><td>Show all integer registers</td></tr>
+  <tr><td><code>-exec stepi</code></td><td>Execute one machine instruction</td></tr>
+  <tr><td><code>-exec x/5i $pc</code></td><td>Disassemble 5 instructions from current PC</td></tr>
+  <tr><td><code>-exec x/4gx 0x80010000</code></td><td>Show 4 × 64-bit words at stack top</td></tr>
+  <tr><td><code>-exec x/7i 0x1000</code></td><td>Disassemble QEMU reset vector</td></tr>
+  <tr><td><code>-exec x/2gx 0x1018</code></td><td>Show kernel_entry and fdt_addr data words</td></tr>
+  <tr><td><code>-exec p/x $a2</code></td><td>Print a2 in hex (should be 0x1e = 30)</td></tr>
+</table>
+
+</main>
+</div>
+
+<footer>
+  <p>RISC-V Bare-Metal on QEMU &nbsp;·&nbsp; <a href="index.html">Home</a> &nbsp;·&nbsp; <a href="https://github.com/YOUR_USERNAME/riscv-bare-metal-qemu">GitHub</a></p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reset Vector Deep Dive | RISC-V Bare-Metal</title>
+<style>
+  :root{--dark:#1f2937;--teal:#0f766e;--teal2:#134e4a;--light:#f0fdf4;--code:#f0f4f8;--muted:#6b7280;--border:#d1d5db;--text:#374151;--yellow:#fbbf24;--purple:#4c1d95}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f9fafb;color:var(--text)}
+  header{background:linear-gradient(135deg,#1a1a2e 0%,var(--teal2) 100%);color:white;padding:48px 24px 40px;text-align:center}
+  header .crumb{font-size:.85rem;color:#9ca3af;margin-bottom:10px}
+  header .crumb a{color:#34d399;text-decoration:none}
+  header h1{font-size:2.2rem;font-weight:800;margin-bottom:10px}
+  header p{font-size:1rem;color:#9ca3af;max-width:640px;margin:0 auto}
+  nav{background:white;border-bottom:1px solid var(--border);display:flex;justify-content:center;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+  nav a{padding:14px 20px;font-size:.9rem;font-weight:600;color:var(--muted);text-decoration:none;border-bottom:3px solid transparent;transition:all .2s}
+  nav a:hover,nav a.active{color:var(--teal);border-bottom-color:var(--teal)}
+  .layout{max-width:1100px;margin:0 auto;padding:40px 24px;display:grid;grid-template-columns:220px 1fr;gap:40px}
+  @media(max-width:768px){.layout{grid-template-columns:1fr}.toc{display:none}}
+  .toc{position:sticky;top:72px;align-self:start}
+  .toc h4{font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px}
+  .toc a{display:block;font-size:.85rem;color:var(--muted);text-decoration:none;padding:5px 0;border-left:2px solid var(--border);padding-left:12px;transition:all .2s}
+  .toc a:hover{color:var(--teal);border-left-color:var(--teal)}
+  .content h2{font-size:1.55rem;color:var(--dark);margin:48px 0 10px;padding-top:8px}
+  .content h2:first-child{margin-top:0}
+  .content h3{font-size:1.1rem;color:var(--teal2);margin:28px 0 8px}
+  .content p{line-height:1.7;margin-bottom:12px}
+  pre{background:var(--dark);color:#e2e8f0;border-radius:10px;padding:20px 24px;margin:16px 0;font-family:'Courier New',monospace;font-size:.83rem;line-height:1.75;overflow-x:auto}
+  pre .c{color:#6b7280} pre .k{color:#f9d71c;font-weight:bold}
+  pre .s{color:#34d399} pre .t{color:#93c5fd} pre .a{color:#fca5a5}
+  code{background:var(--code);color:var(--teal);font-family:'Courier New',monospace;font-size:.85em;padding:2px 6px;border-radius:4px}
+  .callout{border-left:4px solid var(--teal);background:var(--light);padding:14px 18px;border-radius:0 8px 8px 0;margin:20px 0;font-size:.92rem;line-height:1.6}
+  .callout.warn{border-left-color:#f59e0b;background:#fffbeb}
+  .callout.info{border-left-color:#3b82f6;background:#eff6ff}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+  th{background:var(--dark);color:white;padding:10px 14px;text-align:left}
+  td{padding:9px 14px;border-bottom:1px solid var(--border)}
+  tr:nth-child(even) td{background:#f9fafb}
+  td code{background:var(--code);color:var(--purple)}
+  .misconception-table td:nth-child(2){font-weight:700}
+  .false{color:#dc2626} .warn-c{color:#d97706} .true-c{color:#059669}
+  footer{background:var(--dark);color:#9ca3af;text-align:center;padding:32px 24px;font-size:.88rem;margin-top:60px}
+  footer a{color:#34d399;text-decoration:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumb"><a href="index.html">← Home</a> / Reset Vector</div>
+  <h1>QEMU virt Reset Vector</h1>
+  <p>Everything that runs before your first instruction — from the 5-instruction MROM stub to register state on entry to your code.</p>
+</header>
+
+<nav>
+  <a href="index.html">Home</a>
+  <a href="project1.html">Bare Metal</a>
+  <a href="project2.html">ZSBL + Supervisor</a>
+  <a href="reset-vector.html" class="active">Reset Vector</a>
+</nav>
+
+<div class="layout">
+<aside class="toc">
+  <h4>On This Page</h4>
+  <a href="#cpu-reset">CPU Reset State</a>
+  <a href="#memory-map">Memory Map</a>
+  <a href="#disassembly">Reset Vector Disassembly</a>
+  <a href="#instruction-width">32-bit Instructions ≠ 32-bit Mode</a>
+  <a href="#misa">MISA CSR</a>
+  <a href="#mstatus">mstatus Decode</a>
+  <a href="#bios-none">-bios none vs default</a>
+  <a href="#gdb">Inspect in GDB</a>
+  <a href="#misconceptions">Misconceptions</a>
+</aside>
+
+<main class="content">
+
+<h2 id="cpu-reset">CPU State at Power-On</h2>
+<p>When reset is released the RISC-V CPU is in a precisely defined state mandated by the privileged specification. None of this is QEMU-specific — every RISC-V implementation follows these rules.</p>
+<table>
+  <tr><th>Register / CSR</th><th>Reset Value</th><th>Reason</th></tr>
+  <tr><td><code>PC</code></td><td>0x1000</td><td>MROM base — implementation-defined, QEMU virt uses 0x1000</td></tr>
+  <tr><td>Privilege</td><td>M-mode</td><td>Highest level, must configure lower modes before entering them</td></tr>
+  <tr><td><code>mstatus</code></td><td>0x0000000A00000000</td><td>SXL=64-bit, UXL=64-bit; MIE=0 (interrupts off)</td></tr>
+  <tr><td><code>misa</code></td><td>0x8000000000141101</td><td>MXL=10 → 64-bit; extensions I,M,A,C,S,U</td></tr>
+  <tr><td><code>mie</code></td><td>0</td><td>All M-mode interrupts disabled</td></tr>
+  <tr><td><code>satp</code></td><td>0</td><td>Virtual memory off — bare physical addressing</td></tr>
+  <tr><td><code>x0</code></td><td>Always 0</td><td>Hardwired zero by definition</td></tr>
+  <tr><td><code>x1–x31</code></td><td>Undefined (QEMU zeros them)</td><td>Spec does not require initialisation</td></tr>
+</table>
+
+<h2 id="memory-map">QEMU virt Memory Map</h2>
+<table>
+  <tr><th>Address</th><th>Size</th><th>Device</th></tr>
+  <tr><td><code>0x00001000</code></td><td>0xF000</td><td><strong>MROM — reset vector lives here ←</strong></td></tr>
+  <tr><td><code>0x02000000</code></td><td>0x10000</td><td>CLINT (mtime @ 0x200BFF8, mtimecmp hart0 @ 0x2004000)</td></tr>
+  <tr><td><code>0x0C000000</code></td><td>0x4000000</td><td>PLIC</td></tr>
+  <tr><td><code>0x10000000</code></td><td>0x100</td><td>UART0 (NS16550A) — write bytes here for terminal output</td></tr>
+  <tr><td><code>0x80000000</code></td><td>up to 128 MB</td><td>DRAM — your code runs here</td></tr>
+</table>
+
+<h2 id="disassembly">Reset Vector Disassembly</h2>
+<p>QEMU writes this exact sequence into MROM before simulation starts. The instruction bytes are hardcoded in <code>hw/riscv/virt.c</code>; only the two data words are patched at runtime.</p>
+
+<pre><span class="t">0x1000:</span>  <span class="a">97 02 00 00</span>  <span class="s">auipc  t0, 0</span>          <span class="c"># t0 = 0x1000 (current PC)</span>
+<span class="t">0x1004:</span>  <span class="a">13 86 82 02</span>  <span class="s">addi   a1, t0, 40</span>     <span class="c"># a1 = 0x1028 (DTB address)</span>
+<span class="t">0x1008:</span>  <span class="a">73 25 40 f1</span>  <span class="s">csrr   a0, mhartid</span>    <span class="c"># a0 = hart ID (usually 0)</span>
+<span class="t">0x100c:</span>  <span class="a">83 2b 82 01</span>  <span class="s">ld     t0, 24(t0)</span>     <span class="c"># t0 = *(0x1018) = kernel entry</span>
+<span class="t">0x1010:</span>  <span class="a">67 80 02 00</span>  <span class="s">jr     t0</span>             <span class="c"># PC = 0x80000000</span>
+<span class="t">0x1014:</span>  <span class="a">00 00 00 00</span>  &lt;padding&gt;
+<span class="t">0x1018:</span>  <span class="k">.dword kernel_entry</span>                  <span class="c"># written by QEMU from ELF e_entry</span>
+<span class="t">0x1020:</span>  <span class="k">.dword fdt_addr</span>                       <span class="c"># written by QEMU (top of RAM)</span>
+<span class="t">0x1028:</span>  d0 0d fe ed ...   &lt;DTB blob&gt;         <span class="c"># Flattened Device Tree</span></pre>
+
+<p>After these 5 instructions execute, the register state on entry to your firmware is:</p>
+<table>
+  <tr><th>Register</th><th>Value</th><th>Set by</th></tr>
+  <tr><td><code>a0</code></td><td>0 (hart ID)</td><td><code>csrr a0, mhartid</code> — instruction 3</td></tr>
+  <tr><td><code>a1</code></td><td>DTB address (~0x87E00000)</td><td><code>addi a1, t0, 40</code> — instruction 2</td></tr>
+  <tr><td><code>t0</code></td><td>0x80000000</td><td><code>ld t0, 24(t0)</code> — instruction 4 (now trashed)</td></tr>
+  <tr><td><code>PC</code></td><td>0x80000000</td><td><code>jr t0</code> — instruction 5</td></tr>
+  <tr><td>Privilege</td><td>M-mode</td><td>CPU never changed privilege</td></tr>
+</table>
+
+<h2 id="instruction-width">32-bit Instructions ≠ 32-bit Mode</h2>
+<p>Every instruction in the reset vector is 4 bytes wide. It is natural to conclude the CPU is in 32-bit mode — but this is wrong. These are two completely independent properties.</p>
+
+<table>
+  <tr><th>Property</th><th>Width</th><th>Controlled by</th></tr>
+  <tr><td>Instruction encoding width</td><td>Always 32-bit (base ISA)</td><td>Fixed by RISC-V ISA spec — does not change with XLEN</td></tr>
+  <tr><td>Register width (XLEN)</td><td>32 / 64 / 128-bit</td><td><code>misa.MXL</code> — set to 64-bit at reset on QEMU virt</td></tr>
+</table>
+
+<div class="callout info">This is identical to x86-64: a modern 64-bit Intel CPU fetches instructions that may be 1–15 bytes wide, but its registers are 64-bit. Nobody says "x86-64 is in 1-byte mode" when they see a 1-byte NOP. Instruction width and register width are orthogonal.</div>
+
+<h3>Proof that the reset vector runs in 64-bit mode</h3>
+<p>The <code>ld</code> instruction at <code>0x100c</code> loads 8 bytes (64 bits) from memory. This instruction <strong>does not exist in RV32</strong> — executing it on a 32-bit core causes an Illegal Instruction fault. Its presence and successful execution is definitive proof of 64-bit mode.</p>
+<table>
+  <tr><th>Instruction</th><th>Loads</th><th>RV32?</th><th>RV64?</th></tr>
+  <tr><td><code>lw</code></td><td>32 bits</td><td>✅ Yes</td><td>✅ Yes</td></tr>
+  <tr><td><code>ld</code></td><td>64 bits</td><td>❌ Illegal</td><td>✅ Yes — <strong>proof of RV64</strong></td></tr>
+</table>
+
+<h3>Decoding ld t0, 24(t0) → 0x0182b283</h3>
+<pre><span class="c"># I-type instruction format (all loads are I-type):</span>
+<span class="c">#  bits 31:20   19:15  14:12  11:7   6:0</span>
+<span class="c">#  imm[11:0]    rs1    funct3  rd    opcode</span>
+
+0x0182b283 in binary:
+  000000011000  00101   011   00101  0000011
+  ├──────────┤  ├───┤   ├─┤   ├───┤  ├─────┤
+  imm = 24(0x18) rs1=t0  <span class="a">011</span>   rd=t0  LOAD
+
+<span class="a">funct3 = 011 = LD (doubleword)</span>  <span class="c"># Only valid on RV64 — illegal on RV32</span>
+<span class="c"># Effect: t0 = Memory[t0 + 24] = Memory[0x1018] = 0x80000000</span></pre>
+
+<h2 id="misa">MISA CSR — Decoding 0x8000000000141101</h2>
+<pre><span class="c"># Read in GDB: -exec info registers misa</span>
+misa = 0x8000000000141101
+
+  bits 63:62 = <span class="a">10</span>  → MXL = 2 → <span class="k">XLEN = 64-bit (RV64)</span>
+  bit  20    =  1  → U-mode supported
+  bit  18    =  1  → S-mode supported
+  bit  12    =  1  → M extension (multiply/divide)
+  bit   8    =  1  → I base integer ISA
+  bit   2    =  1  → C extension (compressed 16-bit instructions)
+  bit   0    =  1  → A extension (atomics)
+
+ISA string: <span class="s">RV64IMAC + User mode + Supervisor mode</span>
+<span class="c"># Matches: -march=rv64imac in the Makefile</span></pre>
+
+<h2 id="mstatus">mstatus Reset Value — 0x0000000A00000000</h2>
+<p>The lower 32 bits are all zero, which is why tools that show only 32-bit registers display <code>0x00000000</code>. The meaningful bits are in the upper 32:</p>
+<pre>0x0000000A00000000
+
+  bits 37:36 = <span class="a">10</span>  → SXL = 2 → <span class="k">S-mode XLEN = 64-bit</span>
+  bits 35:34 = <span class="a">10</span>  → UXL = 2 → <span class="k">U-mode XLEN = 64-bit</span>
+  bit  12:11 =  0  → MPP = 0 = U-mode (previous privilege)
+  bit   3    =  0  → MIE = 0 → <span class="c">M-mode interrupts DISABLED at reset</span>
+
+<span class="c"># zsbl.S must explicitly set MIE before any interrupt can fire:</span>
+<span class="s">csrr  t0, mstatus</span>
+<span class="s">ori   t0, t0, (1 &lt;&lt; 3)</span>    <span class="c"># set MIE</span>
+<span class="s">csrw  mstatus, t0</span></pre>
+
+<h2 id="bios-none">-bios none vs Default QEMU</h2>
+<table>
+  <tr><th>QEMU Flags</th><th>What runs between reset vector and your code</th><th>Privilege on entry</th></tr>
+  <tr><td><code>-bios none -kernel x.elf</code></td><td>Nothing — reset vector jumps directly to your ELF entry</td><td><strong>M-mode</strong> (Project 1)</td></tr>
+  <tr><td><code>-bios zsbl.elf -device loader,file=super.elf</code></td><td>Your zsbl.S in M-mode, then mret to S-mode</td><td><strong>M→S-mode</strong> (Project 2)</td></tr>
+  <tr><td>(default) <code>-kernel vmlinux</code></td><td>OpenSBI (built-in) in M-mode, then mret to S-mode for Linux</td><td><strong>S-mode</strong> (Linux)</td></tr>
+</table>
+
+<h2 id="gdb">Inspect the Reset Vector in GDB</h2>
+<pre><span class="c"># Start QEMU paused, connect GDB, then:</span>
+
+<span class="s">-exec x/7i 0x1000</span>              <span class="c"># disassemble 7 instructions from 0x1000</span>
+<span class="s">-exec x/2gx 0x1018</span>             <span class="c"># show kernel_entry and fdt_addr data words</span>
+<span class="s">-exec x/4xb 0x1028</span>             <span class="c"># verify DTB magic: 0xd0 0x0d 0xfe 0xed</span>
+
+<span class="c"># Step through manually:</span>
+<span class="s">-exec stepi</span>                    <span class="c"># auipc  → t0 = 0x1000</span>
+<span class="s">-exec info registers t0 a0 a1</span>
+<span class="s">-exec stepi</span>                    <span class="c"># addi   → a1 = 0x1028</span>
+<span class="s">-exec stepi</span>                    <span class="c"># csrr   → a0 = 0</span>
+<span class="s">-exec stepi</span>                    <span class="c"># ld     → t0 = 0x80000000</span>
+<span class="s">-exec stepi</span>                    <span class="c"># jr     → PC = 0x80000000</span>
+
+<span class="c"># Now load symbols and debug your code:</span>
+<span class="s">-exec file main.elf</span>
+<span class="s">-exec break _start</span>
+<span class="s">-exec continue</span></pre>
+
+<h2 id="misconceptions">Common Misconceptions</h2>
+<table class="misconception-table">
+  <tr><th>Misconception</th><th>Verdict</th><th>Reality</th></tr>
+  <tr><td>Instructions are 32-bit wide → CPU is in 32-bit mode</td><td><span class="false">FALSE</span></td><td>Instruction encoding is always 32-bit in base ISA. XLEN=64 is set by misa.MXL=10.</td></tr>
+  <tr><td>CPU starts at address 0x0</td><td><span class="false">FALSE</span></td><td>CPU starts at 0x1000 (MROM base). Address 0x0 is DEBUG region — not executable.</td></tr>
+  <tr><td>-bios none means no firmware runs</td><td><span class="warn-c">MISLEADING</span></td><td>The 5-instruction MROM stub still runs. -bios none skips OpenSBI only.</td></tr>
+  <tr><td>mstatus=0 at reset — CPU unconfigured</td><td><span class="warn-c">MISLEADING</span></td><td>Lower 32 bits are 0 but SXL=UXL=10 in bits 37:34 confirm 64-bit for all modes.</td></tr>
+  <tr><td>mtime runs at 10 MHz (per DTB)</td><td><span class="false">FALSE</span></td><td>DTB reports 10 MHz but QEMU mtime actually ticks at 1 MHz. Measure empirically.</td></tr>
+  <tr><td>a0 and a1 are set by your _start code</td><td><span class="false">FALSE</span></td><td>Set by the QEMU reset vector (csrr + addi) before your code runs. They arrive pre-populated.</td></tr>
+  <tr><td>MROM reset vector can be modified</td><td><span class="false">FALSE</span></td><td>MROM is read-only. Writing to 0x1000 causes a store access fault.</td></tr>
+  <tr><td>satp=0 means the MMU is missing</td><td><span class="true-c">TRUE BUT</span></td><td>satp=0 means virtual memory is disabled, using physical addressing. MMU is present but off. Correct for M-mode firmware.</td></tr>
+</table>
+
+</main>
+</div>
+
+<footer>
+  <p>RISC-V Bare-Metal on QEMU &nbsp;·&nbsp; <a href="index.html">Home</a> &nbsp;·&nbsp; <a href="https://github.com/YOUR_USERNAME/riscv-bare-metal-qemu">GitHub</a></p>
+</footer>
+
+</body>
+</html>
