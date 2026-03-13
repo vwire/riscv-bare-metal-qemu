@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project 3 — OpenSBI + S-mode Payload | RISC-V Bare-Metal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #1c2128;
+  --border:   #30363d;
+  --border2:  #21262d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --green:    #3fb950;
+  --green2:   #238636;
+  --amber:    #e3b341;
+  --red:      #f85149;
+  --blue:     #58a6ff;
+  --purple:   #bc8cff;
+  --orange:   #ffa657;
+  --mono:     'IBM Plex Mono', monospace;
+  --serif:    'DM Serif Display', Georgia, serif;
+  --sans:     'Inter', system-ui, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:15px;line-height:1.6}
+
+/* ── Header ─────────────────────────────────────────────────── */
+header{
+  background:linear-gradient(150deg,#061426 0%,#0d1117 45%,#160a26 100%);
+  border-bottom:1px solid var(--border);
+  padding:56px 24px 44px;text-align:center;
+  position:relative;overflow:hidden;
+}
+header::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 65% 45% at 50% 0%,rgba(63,185,80,.09) 0%,transparent 70%);
+  pointer-events:none;
+}
+.crumb{font-size:.8rem;color:var(--muted);margin-bottom:16px}
+.crumb a{color:var(--green);text-decoration:none}
+.crumb a:hover{text-decoration:underline}
+header h1{
+  font-family:var(--serif);font-size:clamp(1.9rem,4vw,2.9rem);
+  font-weight:400;letter-spacing:-.01em;margin-bottom:12px;
+  line-height:1.15;
+}
+header h1 span{color:var(--green)}
+header p{font-size:1rem;color:var(--muted);max-width:640px;margin:0 auto 22px;line-height:1.75}
+.tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.tag{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:20px;padding:4px 13px;
+  font-family:var(--mono);font-size:.72rem;color:var(--muted);
+}
+.tag.g{border-color:var(--green2);color:var(--green);background:rgba(63,185,80,.07)}
+.tag.p{border-color:#6e40c9;color:var(--purple);background:rgba(188,140,255,.07)}
+.tag.a{border-color:#9e6a03;color:var(--amber);background:rgba(227,179,65,.07)}
+
+/* ── Nav ─────────────────────────────────────────────────────── */
+nav{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;justify-content:center;flex-wrap:wrap;
+  position:sticky;top:0;z-index:100;
+}
+nav a{
+  padding:13px 18px;font-size:.85rem;font-weight:600;
+  color:var(--muted);text-decoration:none;
+  border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+nav a:hover{color:var(--text)}
+nav a.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── Layout ──────────────────────────────────────────────────── */
+.layout{
+  max-width:1140px;margin:0 auto;
+  padding:48px 24px;
+  display:grid;grid-template-columns:200px 1fr;gap:48px;
+}
+@media(max-width:820px){.layout{grid-template-columns:1fr}.toc{display:none}}
+
+/* ── TOC ─────────────────────────────────────────────────────── */
+.toc{position:sticky;top:60px;align-self:start}
+.toc-label{
+  font-size:.68rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--muted);margin-bottom:12px;
+}
+.toc a{
+  display:block;font-size:.8rem;color:var(--muted);
+  text-decoration:none;padding:5px 0 5px 12px;
+  border-left:2px solid var(--border2);line-height:1.4;
+  transition:color .15s,border-color .15s;
+}
+.toc a:hover,.toc a.active{color:var(--green);border-left-color:var(--green)}
+.toc a.sub{padding-left:22px;font-size:.77rem}
+
+/* ── Content ─────────────────────────────────────────────────── */
+.content h2{
+  font-family:var(--serif);font-weight:400;font-size:1.65rem;
+  color:var(--text);margin:56px 0 14px;padding-bottom:10px;
+  border-bottom:1px solid var(--border2);
+}
+.content h2:first-child{margin-top:0}
+.content h3{font-size:.97rem;font-weight:600;color:var(--blue);margin:28px 0 10px}
+.content p{color:#c9d1d9;margin-bottom:14px;line-height:1.78}
+.content ul{padding-left:22px;margin-bottom:14px;color:#c9d1d9}
+.content li{margin-bottom:6px;line-height:1.7}
+
+/* ── Code ────────────────────────────────────────────────────── */
+.code-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin:18px 0;overflow:hidden}
+.code-hd{
+  background:var(--surface2);border-bottom:1px solid var(--border);
+  padding:8px 16px;display:flex;align-items:center;gap:10px;
+}
+.code-fname{font-family:var(--mono);font-size:.77rem;color:var(--muted)}
+.code-lang{
+  margin-left:auto;font-family:var(--mono);font-size:.71rem;color:var(--muted);
+  background:var(--bg);padding:2px 8px;border-radius:4px;border:1px solid var(--border2);
+}
+pre{
+  padding:20px 24px;font-family:var(--mono);
+  font-size:.81rem;line-height:1.8;overflow-x:auto;color:var(--text);
+}
+/* syntax colours */
+pre .c  {color:#6e7681;font-style:italic}   /* comment */
+pre .k  {color:#ff7b72}                      /* keyword/directive */
+pre .fn {color:#d2a8ff}                      /* function */
+pre .s  {color:#a5d6ff}                      /* string/instruction mnemonic */
+pre .lb {color:#79c0ff;font-weight:600}      /* label */
+pre .n  {color:#ffa657}                      /* number/register */
+pre .t  {color:#e3b341}                      /* type/macro name */
+pre .g  {color:#3fb950}                      /* shell command / success */
+pre .cm {color:#56d364}                      /* shell comment */
+pre .hi {color:#ffd700;font-weight:600}      /* golden highlight */
+
+code{
+  font-family:var(--mono);font-size:.84em;
+  background:var(--surface2);border:1px solid var(--border2);
+  padding:1px 6px;border-radius:4px;color:var(--orange);
+}
+
+/* ── Callouts ────────────────────────────────────────────────── */
+.note{border-left:3px solid var(--blue);background:rgba(88,166,255,.06);padding:14px 18px;border-radius:0 6px 6px 0;margin:18px 0;font-size:.9rem;color:#c9d1d9;line-height:1.75}
+.note.warn{border-left-color:var(--amber);background:rgba(227,179,65,.06)}
+.note.danger{border-left-color:var(--red);background:rgba(248,81,73,.06)}
+.note.success{border-left-color:var(--green);background:rgba(63,185,80,.06)}
+.note strong{color:var(--text)}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.ann{width:100%;border-collapse:collapse;margin:16px 0;font-size:.87rem}
+.ann th{background:var(--surface2);border:1px solid var(--border);padding:9px 14px;text-align:left;font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.ann td{border:1px solid var(--border2);padding:9px 14px;vertical-align:top;line-height:1.6;color:#c9d1d9}
+.ann tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.ann td:first-child{font-family:var(--mono);font-size:.79rem;color:var(--green);white-space:nowrap}
+.ann td:nth-child(2){font-family:var(--mono);font-size:.77rem;color:#a5d6ff}
+
+/* ── Step cards ──────────────────────────────────────────────── */
+.step{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:24px 0}
+.step-hd{background:var(--surface2);border-bottom:1px solid var(--border);padding:13px 20px;display:flex;align-items:center;gap:12px}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--green2);color:#fff;font-weight:700;font-size:.84rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-hd h3{margin:0;color:var(--text);font-size:.94rem;font-weight:600}
+.step-bd{padding:20px 24px;background:var(--surface)}
+
+/* ── Flow diagram ────────────────────────────────────────────── */
+.flow{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:22px 28px;font-family:var(--mono);font-size:.81rem;
+  line-height:2.1;margin:20px 0;
+}
+.flow .addr{color:var(--amber)}
+.flow .arrow{color:var(--green)}
+.flow .dim{color:var(--muted)}
+.flow .hi{color:var(--blue);font-weight:600}
+.flow .new{color:var(--green);font-weight:600}
+
+/* ── File tree ───────────────────────────────────────────────── */
+.ftree{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 22px;font-family:var(--mono);font-size:.82rem;line-height:2;margin:16px 0}
+.ftree .dir{color:var(--amber)}
+.ftree .file{color:var(--green)}
+.ftree .cmt{color:var(--muted)}
+
+/* ── Terminal output ─────────────────────────────────────────── */
+.terminal{background:#0a0c10;border:1px solid var(--border);border-radius:8px;padding:20px 22px;font-family:var(--mono);font-size:.81rem;line-height:1.85;color:#7ee787;margin:16px 0;overflow-x:auto}
+.terminal .dim{color:#4b5563}
+.terminal .hi{color:var(--amber)}
+.terminal .blue{color:var(--blue)}
+
+/* ── Two column ──────────────────────────────────────────────── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0}
+@media(max-width:620px){.two-col{grid-template-columns:1fr}}
+.mini{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px}
+.mini h4{font-size:.88rem;font-weight:600;color:var(--text);margin-bottom:6px}
+.mini p{font-size:.83rem;color:var(--muted);margin:0;line-height:1.6}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer{background:var(--surface);border-top:1px solid var(--border);text-align:center;padding:28px 24px;font-size:.85rem;color:var(--muted)}
+footer a{color:var(--green);text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumb"><a href="index.html">← Home</a> / Project 3</div>
+  <h1>Project 3 — <span>OpenSBI</span> + S-mode Payload</h1>
+  <p>Build real OpenSBI from source, boot it on QEMU virt, and write an S-mode payload that queries all SBI extensions and fires timer interrupts using the <code>stimecmp</code> CSR (sstc extension).</p>
+  <div class="tags">
+    <span class="tag g">OpenSBI v1.8</span>
+    <span class="tag g">S-mode</span>
+    <span class="tag p">SBI v1.0 TIME ext</span>
+    <span class="tag p">sstc / stimecmp</span>
+    <span class="tag a">fw_jump.elf</span>
+    <span class="tag">rv64imac_zicsr</span>
+  </div>
+</header>
+
+<nav>
+  <a href="index.html">Home</a>
+  <a href="project1.html">Bare Metal</a>
+  <a href="project2.html">ZSBL + Supervisor</a>
+  <a href="project3.html" class="active">OpenSBI Payload</a>
+  <a href="reset-vector.html">Reset Vector</a>
+</nav>
+
+<div class="layout">
+
+<aside class="toc">
+  <div class="toc-label">On This Page</div>
+  <a href="#overview">Overview</a>
+  <a href="#boot-chain">Boot Chain</a>
+  <a href="#opensbi-build">Building OpenSBI</a>
+  <a class="sub" href="#prereqs">Prerequisites</a>
+  <a class="sub" href="#clone-patch">Clone &amp; Patch</a>
+  <a class="sub" href="#compile">Compile</a>
+  <a class="sub" href="#verify">Verify</a>
+  <a href="#project-files">Project Files</a>
+  <a href="#entry-s">entry.S — Line by Line</a>
+  <a class="sub" href="#stack-setup">Stack Setup</a>
+  <a class="sub" href="#stvec">stvec Install</a>
+  <a class="sub" href="#trap-vec">Trap Vector</a>
+  <a href="#payload-h">payload.h</a>
+  <a href="#payload-c">payload.c — Line by Line</a>
+  <a class="sub" href="#uart">UART Output</a>
+  <a class="sub" href="#time-csr">time CSR</a>
+  <a class="sub" href="#stimecmp">stimecmp (sstc)</a>
+  <a class="sub" href="#sbi-ecall">SBI ecall Core</a>
+  <a class="sub" href="#sbi-base">SBI BASE Extension</a>
+  <a class="sub" href="#sbi-time">SBI TIME Extension</a>
+  <a class="sub" href="#trap-handler">Trap Handler</a>
+  <a class="sub" href="#payload-main">payload_main</a>
+  <a href="#linker">linker.ld</a>
+  <a href="#makefile">Makefile</a>
+  <a href="#run">Build &amp; Run</a>
+  <a href="#output">Expected Output</a>
+  <a href="#sstc-deep">sstc Deep Dive</a>
+  <a href="#csr-map">CSR Quick Reference</a>
+  <a href="#eclipse-debug">Eclipse CDT Debugger</a>
+  <a class="sub" href="#debug-qemu-script">QEMU Debug Script</a>
+  <a class="sub" href="#debug-import">Import Project</a>
+  <a class="sub" href="#debug-config">Debug Configuration</a>
+  <a class="sub" href="#debug-startup">Startup Commands</a>
+  <a class="sub" href="#debug-breakpoints">Breakpoints</a>
+  <a class="sub" href="#debug-expressions">Expressions View</a>
+  <a class="sub" href="#debug-workflow">Step-Through Workflow</a>
+  <a href="#troubleshoot">Troubleshooting</a>
+</aside>
+
+<main class="content">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="overview">Overview</h2>
+
+<p>Projects 1 and 2 handled M-mode themselves — Project 1 ran with <code>-bios none</code>, and Project 2 hand-wrote a minimal M-mode SBI stub. This project hands that responsibility to <strong>production OpenSBI</strong>, the same firmware used on real RISC-V hardware.</p>
+
+<div class="two-col">
+  <div class="mini">
+    <h4>What OpenSBI gives you</h4>
+    <p>Full M-mode init: PMP, CLINT, PLIC, UART, medeleg/mideleg. The official SBI v1.0 extension set: BASE, TIME, IPI, RFENCE, HSM, SRST. You arrive in S-mode with everything already set up.</p>
+  </div>
+  <div class="mini">
+    <h4>What this payload demonstrates</h4>
+    <p>Live SBI BASE queries (spec version, impl ID, probe all extensions). Then 3 timer interrupts — using <code>stimecmp</code> CSR directly on QEMU's sstc hardware instead of going through SBI.</p>
+  </div>
+</div>
+
+<div class="note success">
+  <strong>Final result:</strong> OpenSBI banner → S-mode payload prints SBI info → 3 STI timer interrupts → "Demo complete."
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="boot-chain">Boot Chain</h2>
+
+<div class="flow">
+<div><span class="dim">── QEMU virt boot ─────────────────────────────────────────────────────────</span></div>
+<div><span class="addr">0x1000      </span>MROM reset vector  <span class="dim">(5 instructions, hardcoded in QEMU)</span></div>
+<div>            <span class="arrow">↓  auipc t0,0 / lw t0,24(t0) / jr t0  →  0x80000000</span></div>
+<div><span class="addr">0x80000000  </span><span class="hi">fw_jump.elf</span>  <span class="dim">← your OpenSBI build  (-bios fw_jump.elf)</span></div>
+<div>            <span class="dim">  M-mode: sets mtvec, mideleg, medeleg, PMP</span></div>
+<div>            <span class="dim">  Registers SBI extensions: TIME IPI RFENCE HSM SRST</span></div>
+<div>            <span class="dim">  Enables MENVCFG.STCE  ← allows S-mode to write stimecmp</span></div>
+<div>            <span class="dim">  Prints OpenSBI banner to UART</span></div>
+<div>            <span class="dim">  Sets mepc=0x80200000, sstatus.MPP=S  →  mret</span></div>
+<div>            <span class="arrow">↓  mret  →  CPU enters S-mode, PC=0x80200000</span></div>
+<div>            <span class="dim">  a0 = hartid (0)   a1 = DTB address (0x82200000)</span></div>
+<div><span class="addr">0x80200000  </span><span class="new">payload.elf</span>  <span class="dim">← your S-mode code  (-kernel payload.elf)</span></div>
+<div>            <span class="dim">  entry.S: sp setup, stvec install, call payload_main</span></div>
+<div>            <span class="dim">  payload.c: SBI BASE queries, SBI comparison note</span></div>
+<div>            <span class="dim">  demo_timer(): write stimecmp, enable STIE, wfi loop</span></div>
+<div>            <span class="dim">  trap_handler(): 3× STI (scause=0x8000000000000005)</span></div>
+</div>
+
+<div class="note">
+  <strong><code>-bios</code> vs <code>-kernel</code>:</strong> <code>-bios fw_jump.elf</code> loads your OpenSBI build as the machine firmware, replacing QEMU's built-in OpenSBI. <code>-kernel payload.elf</code> tells QEMU to load the ELF at its linked address (0x80200000) and pass the DTB pointer in <code>a1</code>. OpenSBI then jumps to it. Never use <code>-kernel fw_jump.elf</code> — that loads OpenSBI twice.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="opensbi-build">Building OpenSBI from Source</h2>
+
+<p id="prereqs">OpenSBI uses position-independent code (PIE) for self-relocation. The bare-metal <code>riscv64-unknown-elf-</code> toolchain does not support PIE. You must use the Linux-target toolchain.</p>
+
+<h3>Prerequisites</h3>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">1</span><h3>Install the Linux RISC-V toolchain</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">sudo apt update</span>
+<span class="g">sudo apt install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu</span>
+
+<span class="cm"># Verify — should print GCC 11+ or 13+</span>
+<span class="g">riscv64-linux-gnu-gcc --version</span></pre>
+    </div>
+    <div class="note warn"><strong>Why not riscv64-unknown-elf-?</strong> That toolchain targets bare-metal freestanding code and omits PIE support. OpenSBI requires PIE so its self-relocation stub (<code>fw_base.S</code>) can copy the firmware to its final address at run time. The <code>linux-gnu</code> toolchain includes PIE and is the only supported choice for building OpenSBI.</div>
+  </div>
+</div>
+
+<h3 id="clone-patch">Clone &amp; Patch</h3>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">2</span><h3>Clone the repository</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">cd ~/eclipse-workspace</span>
+<span class="g">git clone https://github.com/riscv-software-src/opensbi.git</span>
+<span class="g">cd opensbi</span>
+<span class="cm"># Tested with v1.8.1-38-g6d5b2b9b</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">3</span><h3>Permanently fix FW_TEXT_START</h3></div>
+  <div class="step-bd">
+    <p>OpenSBI's default <code>FW_TEXT_START</code> is <code>0x0</code>. This causes the generated linker script to place the entry point at address zero — QEMU prints nothing and hangs. Patch it permanently:</p>
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">firmware/objects.mk — one-time patch</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">sed -i 's/firmware-genflags-y += -DFW_TEXT_START=0x0/firmware-genflags-y += -DFW_TEXT_START=0x80000000/' \
+    firmware/objects.mk</span>
+
+<span class="cm"># Verify</span>
+<span class="g">grep "FW_TEXT_START" firmware/objects.mk</span>
+<span class="cm"># firmware-genflags-y += -DFW_TEXT_START=0x80000000  ← correct</span></pre>
+    </div>
+    <div class="note danger"><strong>This patch is required.</strong> Without it the firmware self-relocates to 0x0 and QEMU silently hangs. The patch is permanent within your clone — any future <code>make clean &amp;&amp; make</code> will produce a correctly addressed binary without re-patching.</div>
+  </div>
+</div>
+
+<h3 id="compile">Compile</h3>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">4</span><h3>Build fw_jump.elf</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">cd ~/eclipse-workspace/opensbi</span>
+<span class="g">make PLATFORM=generic clean</span>
+
+<span class="g">make CROSS_COMPILE=riscv64-linux-gnu- \
+     PLATFORM=generic \
+     FW_JUMP=y \
+     FW_JUMP_ADDR=0x80200000 \
+     -j$(nproc)</span></pre>
+    </div>
+    <table class="ann" style="margin-top:14px">
+      <tr><th>Variable</th><th>Value</th><th>Effect</th></tr>
+      <tr><td>CROSS_COMPILE</td><td>riscv64-linux-gnu-</td><td>Use the Linux-target toolchain (supports PIE)</td></tr>
+      <tr><td>PLATFORM</td><td>generic</td><td>The "generic" platform probes hardware via device tree — works for QEMU virt</td></tr>
+      <tr><td>FW_JUMP=y</td><td>enabled</td><td>Build fw_jump firmware: M-mode init, then unconditionally jump to a fixed address</td></tr>
+      <tr><td>FW_JUMP_ADDR</td><td>0x80200000</td><td>The fixed address fw_jump will jump to — must match where your payload is linked</td></tr>
+    </table>
+    <p style="margin-top:14px">In some OpenSBI versions the generated linker script still embeds <code>0x0</code> despite the patch. If so, patch the generated file and relink:</p>
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">fix generated linker script if needed</span><span class="code-lang">bash</span></div>
+      <pre><span class="cm"># Check the entry point — must show 0x80000000</span>
+<span class="g">riscv64-linux-gnu-readelf -h \
+    build/platform/generic/firmware/fw_jump.elf | grep Entry</span>
+
+<span class="cm"># If it shows 0x0, patch the generated script and relink:</span>
+<span class="g">sed -i 's/\. = 0x0;/. = 0x80000000;/' \
+    build/platform/generic/firmware/fw_jump.elf.ld</span>
+<span class="g">make CROSS_COMPILE=riscv64-linux-gnu- PLATFORM=generic \
+     FW_JUMP=y FW_JUMP_ADDR=0x80200000 -j$(nproc)</span></pre>
+    </div>
+  </div>
+</div>
+
+<h3 id="verify">Verify</h3>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">5</span><h3>Run bare — see the OpenSBI banner</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="cm"># Run OpenSBI with no payload — it will print the banner then hang</span>
+<span class="g">qemu-system-riscv64 -machine virt -nographic \
+    -bios build/platform/generic/firmware/fw_jump.elf</span>
+<span class="cm"># Press Ctrl-A X to quit</span></pre>
+    </div>
+    <div class="terminal">OpenSBI v1.8.1-38-g6d5b2b9b<br>
+   ____                    _____ ____ _____<br>
+  / __ \                  / ____|  _ \_   _|<br>
+ | |  | |_ __   ___ _ __ | (___ | |_) || |<br>
+ ...<br>
+<span class="hi">Platform Name             : riscv-virtio,qemu</span><br>
+Boot HART ISA Extensions  : <span class="hi">sstc</span>, zicntr, zihpm, ...<br>
+Boot HART MIDELEG         : 0x0000000000001666<br>
+<span class="blue">Domain0 Next Address      : 0x0000000080200000</span><br>
+Domain0 Next Arg1         : 0x0000000082200000<br>
+<span class="dim">... hangs here — no payload at 0x80200000 yet</span></div>
+    <p>The banner proves OpenSBI is running from your source build. Note <code>sstc</code> listed in ISA Extensions — this means the CPU supports <code>stimecmp</code>, which the payload will use directly.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="project-files">Project Files</h2>
+
+<div class="ftree">
+<span class="dir">opensbi_payload/</span>
+├── <span class="file">entry.S</span>      <span class="cmt">← S-mode entry at 0x80200000: stack, stvec, trap vector</span>
+├── <span class="file">payload.c</span>    <span class="cmt">← SBI BASE queries, stimecmp timer demo, trap handler</span>
+├── <span class="file">payload.h</span>    <span class="cmt">← sbiret struct, SBI extension IDs, function IDs</span>
+├── <span class="file">linker.ld</span>    <span class="cmt">← ORIGIN = 0x80200000, .text.entry first</span>
+└── <span class="file">Makefile</span>     <span class="cmt">← riscv64-unknown-elf-, rv64imac_zicsr, qemu-run target</span>
+</div>
+
+<div class="note">All five files go in <code>opensbi_payload/</code> at the repository root, alongside <code>bare_metal_qemu/</code> and <code>zsbl_supervisor/</code>.</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="entry-s">entry.S — Line by Line</h2>
+
+<p>This is the very first instruction the CPU executes after OpenSBI's <code>mret</code>. The CPU arrives in S-mode at 0x80200000 with <code>a0 = hartid</code> and <code>a1 = DTB address</code>. Both registers must survive intact to reach <code>payload_main</code>.</p>
+
+<h3 id="stack-setup">Stack Setup and Entry</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">entry.S — _start</span><span class="code-lang">RISC-V ASM</span></div>
+  <pre><span class="c"># Place this section in .text.entry so the linker script can</span>
+<span class="c"># put it at the very start of the binary (0x80200000).</span>
+<span class="k">.section</span> .text.entry
+<span class="k">.global</span> _start
+
+<span class="lb">_start:</span>
+    <span class="c"># la = Load Address.  Expands to: auipc t0, %pcrel_hi(sym)</span>
+    <span class="c">#                                  addi  t0, t0, %pcrel_lo(sym)</span>
+    <span class="c"># Both instructions are PC-relative — safe under mcmodel=medany</span>
+    <span class="c"># for targets within ±2 GB of the current PC.</span>
+    <span class="s">la</span>      <span class="n">sp</span>, _sstack_top     <span class="c"># sp ← top of our 8 KB S-mode stack</span>
+
+    <span class="c"># Install the S-mode trap vector BEFORE calling any C code.</span>
+    <span class="c"># If anything faults before stvec is set the CPU will vector</span>
+    <span class="c"># to OpenSBI's internal handler which knows nothing about our</span>
+    <span class="c"># stack and will hang silently.</span>
+    <span class="s">la</span>      <span class="n">t0</span>, _strap_vector
+    <span class="s">csrw</span>    <span class="n">stvec</span>, <span class="n">t0</span>          <span class="c"># MODE = Direct (bits[1:0]=0b00)</span>
+
+    <span class="c"># Jump to C.  a0 (hartid) and a1 (DTB) set by OpenSBI.</span>
+    <span class="c"># We have not touched a0/a1 so they reach payload_main intact.</span>
+    <span class="s">call</span>    payload_main
+
+    <span class="c"># payload_main never returns but spin safely if it somehow does.</span>
+<span class="lb">1:</span>  <span class="s">wfi</span>
+    <span class="s">j</span>       <span class="lb">1b</span></pre>
+</div>
+
+<table class="ann">
+  <tr><th>Instruction</th><th>Operation</th><th>Why Here</th></tr>
+  <tr><td>la sp, _sstack_top</td><td>sp ← address of _sstack_top symbol</td><td>Stack must be valid before any function call or trap. la uses auipc + addi — no absolute addresses needed.</td></tr>
+  <tr><td>la t0, _strap_vector</td><td>t0 ← address of our trap vector</td><td>Need the address in a register before we can write to stvec.</td></tr>
+  <tr><td>csrw stvec, t0</td><td>stvec ← t0 (Direct mode)</td><td>All S-mode traps will jump to _strap_vector. Bits[1:0]=0 = Direct mode (single entry point for all traps).</td></tr>
+  <tr><td>call payload_main</td><td>ra ← PC+4; PC ← payload_main</td><td>Standard ABI function call. a0 and a1 preserved.</td></tr>
+  <tr><td>wfi + j 1b</td><td>Halt hart until interrupt; loop</td><td>Safety net if payload_main returns. wfi saves power; j loops back in case of spurious wake.</td></tr>
+</table>
+
+<h3 id="stvec">Why stvec Must Be Installed First</h3>
+<div class="note warn">
+  OpenSBI sets <code>stvec</code> to point at its own handler before the <code>mret</code>. If your entry code triggers any fault (e.g. a page fault from a misaligned stack) before you overwrite <code>stvec</code>, the CPU will trap to OpenSBI's handler. OpenSBI's handler does not know your stack pointer and will silently corrupt state or hang. Always install your <code>stvec</code> as the very first CSR write.
+</div>
+
+<h3 id="trap-vec">The Trap Vector</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">entry.S — _strap_vector (S-mode trap entry)</span><span class="code-lang">RISC-V ASM</span></div>
+  <pre><span class="c"># .align 2 = align to 4 bytes.  RISC-V spec requires stvec[1:0]=0b00</span>
+<span class="c"># for Direct mode, so the vector address must be 4-byte aligned.</span>
+<span class="k">.align</span> 2
+<span class="k">.global</span> _strap_vector
+<span class="lb">_strap_vector:</span>
+    <span class="c"># Make room on the stack: 256 bytes (32 slots × 8 bytes each).</span>
+    <span class="c"># sp must already be valid — which it is because we set it in _start.</span>
+    <span class="s">addi</span>    <span class="n">sp</span>, <span class="n">sp</span>, -256
+
+    <span class="c"># Save all caller-saved registers.  The trap can fire in the middle</span>
+    <span class="c"># of any code path, so these registers may contain live values.</span>
+    <span class="c"># Callee-saved registers (s0-s11) are preserved by C functions.</span>
+    <span class="s">sd</span>      <span class="n">ra</span>,   0(<span class="n">sp</span>)  <span class="c"># return address — must preserve, call clobbers ra</span>
+    <span class="s">sd</span>      <span class="n">t0</span>,   8(<span class="n">sp</span>)  <span class="c"># temporaries</span>
+    <span class="s">sd</span>      <span class="n">t1</span>,  16(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">t2</span>,  24(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a0</span>,  32(<span class="n">sp</span>)  <span class="c"># a0-a7: argument / return-value registers</span>
+    <span class="s">sd</span>      <span class="n">a1</span>,  40(<span class="n">sp</span>)  <span class="c"># a0 and a1 also hold sbiret results</span>
+    <span class="s">sd</span>      <span class="n">a2</span>,  48(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a3</span>,  56(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a4</span>,  64(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a5</span>,  72(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a6</span>,  80(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">a7</span>,  88(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">t3</span>,  96(<span class="n">sp</span>)  <span class="c"># more temporaries</span>
+    <span class="s">sd</span>      <span class="n">t4</span>, 104(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">t5</span>, 112(<span class="n">sp</span>)
+    <span class="s">sd</span>      <span class="n">t6</span>, 120(<span class="n">sp</span>)
+
+    <span class="c"># Call the C handler.  It reads scause and sepc itself via inline asm.</span>
+    <span class="s">call</span>    payload_trap_handler
+
+    <span class="c"># Restore all 16 registers in reverse order.</span>
+    <span class="s">ld</span>      <span class="n">ra</span>,   0(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t0</span>,   8(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t1</span>,  16(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t2</span>,  24(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a0</span>,  32(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a1</span>,  40(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a2</span>,  48(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a3</span>,  56(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a4</span>,  64(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a5</span>,  72(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a6</span>,  80(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">a7</span>,  88(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t3</span>,  96(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t4</span>, 104(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t5</span>, 112(<span class="n">sp</span>)
+    <span class="s">ld</span>      <span class="n">t6</span>, 120(<span class="n">sp</span>)
+    <span class="s">addi</span>    <span class="n">sp</span>, <span class="n">sp</span>, 256       <span class="c"># release the stack frame</span>
+
+    <span class="c"># sret: restores sepc → PC, restores SPP → privilege level</span>
+    <span class="c"># The interrupted code continues exactly where it was.</span>
+    <span class="s">sret</span>
+
+<span class="c"># ── S-mode stack: 8 KB, page-aligned ──────────────────────────</span>
+<span class="k">.section</span> .sstack
+<span class="k">.align</span> 12                   <span class="c"># 2^12 = 4096-byte page alignment</span>
+<span class="lb">_sstack_bottom:</span>
+    <span class="k">.space</span>  8192             <span class="c"># reserve 8 KB of zeros</span>
+<span class="lb">_sstack_top:</span>                <span class="c"># sp starts here; stack grows downward</span></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="payload-h">payload.h — SBI Interface Definitions</h2>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.h</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* Every SBI ecall returns two values in a0 and a1.
+ * We wrap them in a struct so callers get both atomically.        */</span>
+<span class="k">struct</span> <span class="t">sbiret</span> {
+    <span class="k">long</span> error;   <span class="c">/* 0 = SBI_SUCCESS; negative = error code */</span>
+    <span class="k">long</span> value;   <span class="c">/* result — e.g. spec version, impl ID, probe answer */</span>
+};
+
+<span class="c">/* ── Extension IDs (EID) ──────────────────────────────────────
+ * EIDs 0x00–0x0F are "legacy" (SBI v0.1, deprecated).
+ * EIDs 0x10+ are the SBI v1.0 standard extensions.
+ * The string EIDs (e.g. 0x54494D45 = "TIME") are defined so
+ * that you can read the ID as ASCII.                             */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_BASE</span>    <span class="n">0x10</span>        <span class="c">/* mandatory on all v1.0 implementations */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_TIME</span>    <span class="n">0x54494D45</span>  <span class="c">/* 'T','I','M','E' — set timer */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_IPI</span>     <span class="n">0x735049</span>    <span class="c">/* 's','P','I'  — send IPI */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_RFENCE</span>  <span class="n">0x52464E43</span>  <span class="c">/* 'R','F','N','C' — remote fence */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_HSM</span>     <span class="n">0x48534D</span>    <span class="c">/* 'H','S','M' — hart state management */</span>
+<span class="k">#define</span> <span class="t">SBI_EXT_SRST</span>    <span class="n">0x53525354</span>  <span class="c">/* 'S','R','S','T' — system reset */</span>
+
+<span class="c">/* ── BASE function IDs (used with SBI_EXT_BASE) ──────────────── */</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_GET_SPEC_VERSION</span>   <span class="n">0</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_GET_IMPL_ID</span>        <span class="n">1</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_GET_IMPL_VERSION</span>   <span class="n">2</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_PROBE_EXTENSION</span>    <span class="n">3</span>  <span class="c">/* a0=eid → returns 0=absent, >0=present */</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_GET_MVENDORID</span>      <span class="n">4</span>
+<span class="k">#define</span> <span class="t">SBI_BASE_GET_MARCHID</span>        <span class="n">5</span>
+
+<span class="c">/* ── TIME function ID ─────────────────────────────────────────── */</span>
+<span class="k">#define</span> <span class="t">SBI_TIME_SET_TIMER</span>          <span class="n">0</span>  <span class="c">/* a0=absolute stime value */</span>
+
+<span class="c">/* ── Implementation IDs ──────────────────────────────────────── */</span>
+<span class="k">#define</span> <span class="t">SBI_IMPL_OPENSBI</span>            <span class="n">1</span></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="payload-c">payload.c — Line by Line</h2>
+
+<h3 id="uart">UART Output (NS16550A)</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — UART section</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* QEMU virt places an NS16550A UART at 0x10000000.
+ * OpenSBI already initialised it — we can write directly.       */</span>
+<span class="k">#define</span> <span class="t">UART0</span>     <span class="n">0x10000000UL</span>
+
+<span class="c">/* volatile: the compiler must not cache these — they are hardware regs.
+ * UART_TX  (offset 0x00) = Transmit Holding Register — write a byte here.
+ * UART_LSR (offset 0x05) = Line Status Register — bit 5 = THRE.          */</span>
+<span class="k">#define</span> <span class="t">UART_TX</span>   (*(volatile <span class="k">unsigned char</span>*)(<span class="t">UART0</span> + <span class="n">0x00</span>))
+<span class="k">#define</span> <span class="t">UART_LSR</span>  (*(volatile <span class="k">unsigned char</span>*)(<span class="t">UART0</span> + <span class="n">0x05</span>))
+<span class="k">#define</span> <span class="t">UART_THRE</span> (<span class="n">1</span> &lt;&lt; <span class="n">5</span>)  <span class="c">/* Transmit Holding Register Empty — safe to send */</span>
+
+<span class="k">static void</span> <span class="fn">uart_putc</span>(<span class="k">char</span> c) {
+    <span class="c">/* Spin until UART is ready, then write the character. */</span>
+    <span class="k">while</span> (!(<span class="t">UART_LSR</span> &amp; <span class="t">UART_THRE</span>));
+    <span class="t">UART_TX</span> = c;
+}
+
+<span class="k">static void</span> <span class="fn">puts</span>(<span class="k">const char</span> *s) { <span class="k">while</span> (*s) <span class="fn">uart_putc</span>(*s++); }
+
+<span class="c">/* Print 64-bit value as 0xHHHHHHHHHHHHHHHH (always 16 nibbles). */</span>
+<span class="k">static void</span> <span class="fn">put_hex</span>(<span class="k">unsigned long</span> v) {
+    <span class="k">const char</span> *h = <span class="s">"0123456789ABCDEF"</span>;
+    <span class="fn">puts</span>(<span class="s">"0x"</span>);
+    <span class="c">/* Shift 60 bits right to get the most-significant nibble first,
+     * then step down 4 bits at a time to the least-significant nibble. */</span>
+    <span class="k">for</span> (<span class="k">int</span> i = <span class="n">60</span>; i &gt;= <span class="n">0</span>; i -= <span class="n">4</span>)
+        <span class="fn">uart_putc</span>(h[(v &gt;&gt; i) &amp; <span class="n">0xF</span>]);
+}</pre>
+</div>
+
+<h3 id="time-csr">Reading the Timer — <code>time</code> CSR</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — get_time()</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* The 'time' CSR (0xC01) is a read-only alias for mtime.
+ * It is always readable from S-mode — OpenSBI does not block it.
+ *
+ * DO NOT try to read CLINT mtime directly via MMIO (0x200BFF8).
+ * OpenSBI's PMP configuration marks the entire CLINT region
+ * (0x2000000–0x200FFFF) as M-mode only.  An S-mode MMIO load
+ * to that address will take a load access fault (mcause=5).       */</span>
+<span class="k">static inline unsigned long long</span> <span class="fn">get_time</span>(<span class="k">void</span>) {
+    <span class="k">unsigned long</span> t;
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, time"</span> : <span class="s">"=r"</span>(t));
+    <span class="k">return</span> t;
+}</pre>
+</div>
+
+<div class="note warn">
+  <strong>Why not read CLINT MMIO directly?</strong> OpenSBI's boot-time PMP setup creates a region covering <code>0x2000000–0x200FFFF</code> (the CLINT) with M-mode permissions only. Any S-mode load from that range causes a load access fault — you will get stuck in your own trap handler printing <code>[EXC] scause=0x0000000000000005</code> forever. Always use <code>csrr %0, time</code> from S-mode.
+</div>
+
+<h3 id="stimecmp">Writing the Timer — <code>stimecmp</code> (sstc Extension)</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — set_stimecmp()</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* stimecmp is the S-mode timer compare register added by the sstc extension.
+ *
+ * When stimecmp is present and MENVCFG.STCE=1 (set by OpenSBI):
+ *   - S-mode can write stimecmp directly to schedule a timer interrupt.
+ *   - When time >= stimecmp, the STI bit (bit 5) of sip fires.
+ *   - The interrupt arrives as an STI: scause = 0x8000000000000005.
+ *   - No SBI ecall is needed — zero M-mode involvement.
+ *
+ * stimecmp CSR number = 0x14D.
+ * riscv64-unknown-elf-gcc 10.2 does not recognise the mnemonic 'stimecmp'
+ * because it predates the _sstc ISA extension string in that toolchain.
+ * Using the raw CSR number (0x14D) bypasses this — the assembler accepts
+ * any valid 12-bit CSR number regardless of ISA extensions.            */</span>
+<span class="k">static inline void</span> <span class="fn">set_stimecmp</span>(<span class="k">unsigned long long</span> t) {
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrw 0x14D, %0"</span> :: <span class="s">"r"</span>(t));
+    <span class="c">/* Encoding: csrw 0x14D, rs1
+     * This is functionally identical to: csrw stimecmp, rs1
+     * RISC-V CSR instructions always accept the CSR as an immediate.  */</span>
+}
+
+<span class="k">#define</span> <span class="t">TIMER_INTERVAL</span>  <span class="n">5000000ULL</span>
+<span class="c">/* QEMU's virtual CLINT runs at 10 MHz on most builds.
+ * 5,000,000 ticks ≈ 0.5 seconds per tick.
+ * The exact period doesn't matter — we just want visible output.   */</span></pre>
+</div>
+
+<h3 id="sbi-ecall">SBI ecall — The Core Mechanism</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — sbi_ecall()</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* SBI v1.0 calling convention (SBI spec §3.1):
+ *
+ *   BEFORE ecall        AFTER ecall
+ *   a7 = Extension ID   a0 = error code (0 = success)
+ *   a6 = Function ID    a1 = return value
+ *   a0-a5 = arguments
+ *
+ * 'ecall' in S-mode generates an "environment call from S-mode"
+ * exception (mcause = 9).  OpenSBI's M-mode handler dispatches
+ * based on a7 (EID) and a6 (FID), runs the implementation,
+ * stores results in a0/a1, and mret-s back to S-mode.
+ *
+ * The register constraints below bind C variables to hardware
+ * registers so GCC knows exactly which physical registers carry
+ * the arguments and receive the results.                          */</span>
+
+<span class="k">static struct</span> <span class="t">sbiret</span> <span class="fn">sbi_ecall</span>(
+    <span class="k">unsigned long</span> eid, <span class="k">unsigned long</span> fid,
+    <span class="k">unsigned long</span> a0,  <span class="k">unsigned long</span> a1,
+    <span class="k">unsigned long</span> a2,  <span class="k">unsigned long</span> a3,
+    <span class="k">unsigned long</span> a4,  <span class="k">unsigned long</span> a5)
+{
+    <span class="c">/* "register ... __asm__("aN")" = this C variable MUST live in
+     * hardware register aN for the duration of the inline asm block.
+     * Without this, GCC might load the value into a different register
+     * and the ecall would pass garbage.                              */</span>
+    <span class="k">register unsigned long</span> _a0 <span class="fn">__asm__</span>(<span class="s">"a0"</span>) = a0;
+    <span class="k">register unsigned long</span> _a1 <span class="fn">__asm__</span>(<span class="s">"a1"</span>) = a1;
+    <span class="k">register unsigned long</span> _a2 <span class="fn">__asm__</span>(<span class="s">"a2"</span>) = a2;
+    <span class="k">register unsigned long</span> _a3 <span class="fn">__asm__</span>(<span class="s">"a3"</span>) = a3;
+    <span class="k">register unsigned long</span> _a4 <span class="fn">__asm__</span>(<span class="s">"a4"</span>) = a4;
+    <span class="k">register unsigned long</span> _a5 <span class="fn">__asm__</span>(<span class="s">"a5"</span>) = a5;
+    <span class="k">register unsigned long</span> _a6 <span class="fn">__asm__</span>(<span class="s">"a6"</span>) = fid;  <span class="c">/* function ID */</span>
+    <span class="k">register unsigned long</span> _a7 <span class="fn">__asm__</span>(<span class="s">"a7"</span>) = eid;  <span class="c">/* extension ID */</span>
+
+    <span class="fn">__asm__ volatile</span>(<span class="s">"ecall"</span>
+        : <span class="s">"+r"</span>(_a0), <span class="s">"+r"</span>(_a1)   <span class="c">/* "+r" = read-write: GCC treats as both</span>
+<span class="c">                                    input and output.  OpenSBI overwrites</span>
+<span class="c">                                    a0 with error and a1 with value.     */</span>
+        : <span class="s">"r"</span>(_a2), <span class="s">"r"</span>(_a3),   <span class="c">/* "r"  = read-only input registers       */</span>
+          <span class="s">"r"</span>(_a4), <span class="s">"r"</span>(_a5),
+          <span class="s">"r"</span>(_a6), <span class="s">"r"</span>(_a7)
+        : <span class="s">"memory"</span>);             <span class="c">/* memory clobber: OpenSBI may read/write
+                                    memory (e.g. device tree, UART).     */</span>
+
+    <span class="k">return</span> (<span class="k">struct</span> <span class="t">sbiret</span>){ .error = _a0, .value = _a1 };
+}</pre>
+</div>
+
+<h3 id="sbi-base">SBI BASE Extension — Runtime Queries</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — demo_sbi_base()</span><span class="code-lang">C</span></div>
+  <pre><span class="k">static void</span> <span class="fn">demo_sbi_base</span>(<span class="k">void</span>) {
+    <span class="k">struct</span> <span class="t">sbiret</span> ret;
+
+    <span class="c">/* ── GET_SPEC_VERSION ──────────────────────────────────────────
+     * Returns the SBI specification version this firmware implements.
+     * Packed as: bits[30:24] = major, bits[23:0] = minor.
+     * Example: 0x03000000 → major=3, minor=0 → print "3.0"           */</span>
+    ret = <span class="fn">sbi_ecall</span>(<span class="t">SBI_EXT_BASE</span>, <span class="t">SBI_BASE_GET_SPEC_VERSION</span>, <span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>);
+    <span class="fn">puts</span>(<span class="s">"  SBI Spec Version : "</span>);
+    <span class="fn">put_dec</span>((ret.value &gt;&gt; <span class="n">24</span>) &amp; <span class="n">0x7F</span>);  <span class="c">/* major in bits[30:24] */</span>
+    <span class="fn">uart_putc</span>(<span class="s">'.'</span>);
+    <span class="fn">put_dec</span>(ret.value &amp; <span class="n">0xFFFFFF</span>);       <span class="c">/* minor in bits[23:0]  */</span>
+
+    <span class="c">/* ── PROBE_EXTENSION ──────────────────────────────────────────
+     * Pass any EID in a0; returns 0 = not present, >0 = available.
+     * Use this at runtime rather than assuming extension support.      */</span>
+    <span class="k">unsigned long</span> exts[] = {
+        <span class="t">SBI_EXT_TIME</span>, <span class="t">SBI_EXT_IPI</span>, <span class="t">SBI_EXT_RFENCE</span>,
+        <span class="t">SBI_EXT_HSM</span>,  <span class="t">SBI_EXT_SRST</span>
+    };
+    <span class="k">const char</span> *names[] = { <span class="s">"TIME"</span>, <span class="s">"IPI"</span>, <span class="s">"RFENCE"</span>, <span class="s">"HSM"</span>, <span class="s">"SRST"</span> };
+    <span class="fn">puts</span>(<span class="s">"  Extensions       : "</span>);
+    <span class="k">for</span> (<span class="k">int</span> i = <span class="n">0</span>; i &lt; <span class="n">5</span>; i++) {
+        ret = <span class="fn">sbi_ecall</span>(<span class="t">SBI_EXT_BASE</span>, <span class="t">SBI_BASE_PROBE_EXTENSION</span>,
+                        exts[i], <span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>);
+        <span class="k">if</span> (ret.value)  <span class="c">/* non-zero = extension present */</span>
+            { <span class="fn">puts</span>(names[i]); <span class="fn">uart_putc</span>(<span class="s">' '</span>); }
+    }
+}</pre>
+</div>
+
+<h3 id="sbi-time">SBI TIME Extension — The Correct SBI v1.0 API</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — sbi_set_timer() and comparison</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* SBI TIME extension (EID = 0x54494D45 "TIME").
+ *
+ * Old way — legacy SBI v0.1 (deprecated since SBI v0.2):
+ *   a7 = 0x00 (SET_TIMER legacy), a0 = timer_value
+ *   This is how zsbl.S in Project 2 arms the timer.
+ *
+ * Correct way — SBI v1.0:
+ *   a7 = 0x54494D45 (extension "TIME"), a6 = 0 (SET_TIMER function)
+ *   a0 = stime_value (absolute value — timer fires when time >= this)
+ *
+ * Both write mtimecmp in M-mode.  The v1.0 form is what production
+ * firmware beyond OpenSBI v0.x will support.                        */</span>
+<span class="k">static void</span> <span class="fn">sbi_set_timer</span>(<span class="k">unsigned long long</span> t) {
+    <span class="fn">sbi_ecall</span>(<span class="t">SBI_EXT_TIME</span>, <span class="t">SBI_TIME_SET_TIMER</span>, t, <span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>,<span class="n">0</span>);
+}</pre>
+</div>
+
+<h3 id="timer-demo">Timer Demo — Arming and Waiting</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — demo_timer()</span><span class="code-lang">C</span></div>
+  <pre><span class="k">static void</span> <span class="fn">demo_timer</span>(<span class="k">void</span>) {
+    <span class="c">/* On QEMU with sstc, we write stimecmp directly (no SBI ecall).
+     * OpenSBI set MENVCFG.STCE=1 during boot, enabling S-mode writes.  */</span>
+    <span class="fn">set_stimecmp</span>(<span class="fn">get_time</span>() + <span class="t">TIMER_INTERVAL</span>);
+    <span class="c">/* The CPU will now fire an STI when time >= stimecmp.
+     * But interrupts are still globally disabled — we must enable them. */</span>
+
+    <span class="c">/* Enable Supervisor Timer Interrupt Enable — bit 5 in sie.
+     * Without this bit set, the STI pending bit (sip.STIP) will never
+     * be acted upon even when time >= stimecmp.                         */</span>
+    <span class="k">unsigned long</span> sie;
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, sie"</span> : <span class="s">"=r"</span>(sie));
+    sie |= (<span class="n">1UL</span> &lt;&lt; <span class="n">5</span>);   <span class="c">/* bit 5 = STIE */</span>
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrw sie, %0"</span> :: <span class="s">"r"</span>(sie));
+
+    <span class="c">/* Enable global S-mode interrupt enable — bit 1 in sstatus.
+     * This is the master interrupt switch for S-mode.  Even with
+     * STIE set, no interrupt fires until sstatus.SIE=1.              */</span>
+    <span class="k">unsigned long</span> ss;
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, sstatus"</span> : <span class="s">"=r"</span>(ss));
+    ss |= (<span class="n">1UL</span> &lt;&lt; <span class="n">1</span>);    <span class="c">/* bit 1 = SIE */</span>
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrw sstatus, %0"</span> :: <span class="s">"r"</span>(ss));
+
+    <span class="c">/* wfi: Wait For Interrupt — suspends the hart until an interrupt
+     * is pending and enabled.  More power-efficient than spinning.
+     * Break out of the loop once we have received 3 interrupts.      */</span>
+    <span class="k">while</span> (timer_count &lt; <span class="n">3</span>)
+        <span class="fn">__asm__ volatile</span>(<span class="s">"wfi"</span>);
+}</pre>
+</div>
+
+<h3 id="trap-handler">Trap Handler</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — payload_trap_handler()</span><span class="code-lang">C</span></div>
+  <pre><span class="k">void</span> <span class="fn">payload_trap_handler</span>(<span class="k">void</span>) {
+    <span class="k">unsigned long</span> scause, sepc;
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, scause"</span> : <span class="s">"=r"</span>(scause));
+    <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, sepc"</span>   : <span class="s">"=r"</span>(sepc));
+
+    <span class="c">/* scause bit 63: 1 = interrupt (async), 0 = exception (sync).
+     * Interrupts and exceptions share the same CSR but use the top
+     * bit as a type discriminator.                                    */</span>
+    <span class="k">if</span> (scause &amp; (<span class="n">1UL</span> &lt;&lt; <span class="n">63</span>)) {
+        <span class="k">unsigned long</span> code = scause &amp; ~(<span class="n">1UL</span> &lt;&lt; <span class="n">63</span>); <span class="c">/* strip the type bit */</span>
+
+        <span class="k">if</span> (code == <span class="n">5</span>) {
+            <span class="c">/* code 5 = Supervisor Timer Interrupt (STI).
+             * Fires because time >= stimecmp (sstc path).
+             * With sstc, the interrupt clears automatically once
+             * stimecmp is written to a future value.                */</span>
+            timer_count++;
+            <span class="fn">puts</span>(<span class="s">"[IRQ] Timer #"</span>);
+            <span class="fn">put_dec</span>(timer_count);
+            <span class="fn">puts</span>(<span class="s">"  time="</span>);
+            <span class="fn">put_hex</span>((<span class="k">unsigned long</span>)<span class="fn">get_time</span>());
+            <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+
+            <span class="k">if</span> (timer_count &lt; <span class="n">3</span>) {
+                <span class="c">/* Re-arm: write a new stimecmp value in the future. */</span>
+                <span class="fn">set_stimecmp</span>(<span class="fn">get_time</span>() + <span class="t">TIMER_INTERVAL</span>);
+            } <span class="k">else</span> {
+                <span class="c">/* Disarm: set stimecmp to max so it never fires again. */</span>
+                <span class="fn">set_stimecmp</span>(<span class="n">0xFFFFFFFFFFFFFFFFULL</span>);
+                <span class="c">/* Also clear STIE in sie for belt-and-suspenders. */</span>
+                <span class="k">unsigned long</span> sie;
+                <span class="fn">__asm__ volatile</span>(<span class="s">"csrr %0, sie"</span> : <span class="s">"=r"</span>(sie));
+                sie &amp;= ~(<span class="n">1UL</span> &lt;&lt; <span class="n">5</span>);
+                <span class="fn">__asm__ volatile</span>(<span class="s">"csrw sie, %0"</span> :: <span class="s">"r"</span>(sie));
+            }
+        } <span class="k">else if</span> (code == <span class="n">1</span>) {
+            <span class="c">/* code 1 = Supervisor Software Interrupt (SSI).
+             * Fallback path: OpenSBI injects STIP via sip.SSIP
+             * on hardware without sstc.  Should not fire on QEMU virt
+             * when sstc is present — included for completeness.        */</span>
+            timer_count++;
+            <span class="fn">puts</span>(<span class="s">"[IRQ] SSI Timer #"</span>); <span class="fn">put_dec</span>(timer_count); <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+            <span class="fn">__asm__ volatile</span>(<span class="s">"csrc sip, %0"</span> :: <span class="s">"r"</span>(<span class="n">1UL</span> &lt;&lt; <span class="n">1</span>)); <span class="c">/* clear SSIP */</span>
+            <span class="k">if</span> (timer_count &lt; <span class="n">3</span>)
+                <span class="fn">sbi_set_timer</span>(<span class="fn">get_time</span>() + <span class="t">TIMER_INTERVAL</span>);
+        } <span class="k">else</span> {
+            <span class="fn">puts</span>(<span class="s">"[IRQ] Unknown code="</span>); <span class="fn">put_dec</span>(code); <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+        }
+    } <span class="k">else</span> {
+        <span class="c">/* Synchronous exception.  Print diagnostics and skip the
+         * faulting instruction by advancing sepc by 4 bytes.          */</span>
+        <span class="fn">puts</span>(<span class="s">"[EXC] scause="</span>); <span class="fn">put_hex</span>(scause);
+        <span class="fn">puts</span>(<span class="s">" sepc="</span>);        <span class="fn">put_hex</span>(sepc); <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+        <span class="fn">__asm__ volatile</span>(<span class="s">"csrw sepc, %0"</span> :: <span class="s">"r"</span>(sepc + <span class="n">4</span>));
+    }
+}
+
+<span class="c">/* Global interrupt counter — declared volatile because it is written
+ * by the trap handler (interrupt context) and read in demo_timer()
+ * (normal context).  volatile prevents the compiler from caching the
+ * value in a register across the wfi instruction.                     */</span>
+<span class="k">static volatile int</span> timer_count = <span class="n">0</span>;</pre>
+</div>
+
+<table class="ann">
+  <tr><th>scause value</th><th>Meaning</th><th>Source</th></tr>
+  <tr><td>0x8000000000000005</td><td>Supervisor Timer Interrupt (STI)</td><td>time &gt;= stimecmp (sstc path) — what fires on QEMU</td></tr>
+  <tr><td>0x8000000000000001</td><td>Supervisor Software Interrupt (SSI)</td><td>OpenSBI injects via sip.SSIP — fallback on non-sstc hardware</td></tr>
+  <tr><td>0x0000000000000005</td><td>Load access fault</td><td>S-mode read of PMP-blocked address (e.g. CLINT MMIO)</td></tr>
+  <tr><td>0x0000000000000009</td><td>Environment call from S-mode</td><td>ecall instruction — not expected in this payload</td></tr>
+</table>
+
+<h3 id="payload-main">payload_main — Putting It Together</h3>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">payload.c — payload_main()</span><span class="code-lang">C</span></div>
+  <pre><span class="c">/* Called by entry.S after sp and stvec are set up.
+ * a0 and a1 set by OpenSBI are passed through intact:
+ *   a0 = hartid (which hardware thread/core we are running on)
+ *   a1 = DTB physical address (device tree blob OpenSBI built)      */</span>
+<span class="k">void</span> <span class="fn">payload_main</span>(<span class="k">unsigned long</span> hartid, <span class="k">unsigned long</span> dtb) {
+    <span class="fn">puts</span>(<span class="s">"\r\n########################################\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"#   OpenSBI Payload Demo               #\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"########################################\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"  Hart ID : "</span>); <span class="fn">put_hex</span>(hartid); <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"  DTB     : "</span>); <span class="fn">put_hex</span>(dtb);    <span class="fn">puts</span>(<span class="s">"\r\n"</span>);
+
+    <span class="fn">demo_sbi_base</span>();       <span class="c">/* query spec version, impl, extensions */</span>
+    <span class="fn">demo_sbi_comparison</span>(); <span class="c">/* print note on legacy vs SBI v1.0 convention */</span>
+    <span class="fn">demo_timer</span>();          <span class="c">/* write stimecmp, wfi, 3 timer interrupts */</span>
+
+    <span class="fn">puts</span>(<span class="s">"\r\n########################################\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"#   Demo complete. System halted.       #\r\n"</span>);
+    <span class="fn">puts</span>(<span class="s">"########################################\r\n"</span>);
+
+    <span class="k">while</span> (<span class="n">1</span>) <span class="fn">__asm__ volatile</span>(<span class="s">"wfi"</span>); <span class="c">/* halt: power-efficient infinite loop */</span>
+}</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="linker">linker.ld</h2>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">linker.ld</span><span class="code-lang">linker script</span></div>
+  <pre><span class="c">/* Tell the linker which symbol is the entry point.
+ * This sets the ELF e_entry field.  QEMU's -kernel reads e_entry
+ * to find the program's start address.                           */</span>
+<span class="t">ENTRY</span>(_start)
+
+<span class="t">MEMORY</span> {
+    <span class="c">/* 0x80200000: the address fw_jump jumps to (FW_JUMP_ADDR).
+     * Must match the make variable passed during OpenSBI build.  */</span>
+    RAM (rwx) : ORIGIN = <span class="n">0x80200000</span>, LENGTH = 2M
+}
+
+<span class="t">SECTIONS</span> {
+    . = <span class="n">0x80200000</span>;
+
+    .text : {
+        *(.text.entry)  <span class="c">/* _start MUST be first — entry.S .text.entry */</span>
+        *(.text*)       <span class="c">/* all other .text from payload.c and entry.S  */</span>
+    } &gt; RAM
+
+    .rodata : { *(.rodata*) } &gt; RAM   <span class="c">/* string literals, const arrays */</span>
+    .data   : { *(.data*)   } &gt; RAM   <span class="c">/* initialised global variables */</span>
+
+    .bss : {
+        _bss_start = .;
+        *(.bss*) *(COMMON)          <span class="c">/* zero-initialised globals */</span>
+        _bss_end = .;
+    } &gt; RAM
+
+    .sstack : { *(.sstack) } &gt; RAM    <span class="c">/* 8 KB stack from entry.S */</span>
+}</pre>
+</div>
+
+<div class="note">
+  <strong>Why <code>*(.text.entry)</code> first?</strong> Without this the linker is free to place any function first in the <code>.text</code> section. If <code>payload_main</code> ends up before <code>_start</code>, the CPU would jump straight into the middle of a C function with no stack — instant fault. The explicit <code>.text.entry</code> placement guarantees <code>_start</code> is always at 0x80200000.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="makefile">Makefile</h2>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">Makefile</span><span class="code-lang">make</span></div>
+  <pre><span class="t">CROSS</span>   = riscv64-unknown-elf-
+<span class="t">AS</span>      = $(<span class="t">CROSS</span>)as
+<span class="t">CC</span>      = $(<span class="t">CROSS</span>)gcc
+<span class="t">LD</span>      = $(<span class="t">CROSS</span>)ld
+
+<span class="c"># rv64imac_zicsr:
+#   rv64    = 64-bit base integer ISA
+#   i       = base integer (RV64I)
+#   m       = multiply/divide
+#   a       = atomic instructions
+#   c       = compressed 16-bit instructions
+#   _zicsr  = CSR instructions (csrr, csrw, etc.)
+#
+# _zicsr must be explicit on GCC 12+ which separates it from the base ISA.
+# GCC 10.2 (used in this project) includes CSR instructions in rv64imac
+# by default — but including _zicsr doesn't hurt.
+# We do NOT add _sstc because GCC 10.2 doesn't know it.
+# We use raw CSR number 0x14D for stimecmp instead.              </span>
+<span class="t">ARCH</span>    = -march=rv64imac_zicsr -mabi=lp64
+
+<span class="t">ASFLAGS</span> = -g $(<span class="t">ARCH</span>)
+<span class="t">CFLAGS</span>  = -g -O0 $(<span class="t">ARCH</span>) \
+           -nostdlib -nostartfiles \  <span class="c"># no C runtime startup code</span>
+           -ffreestanding \           <span class="c"># no hosted standard library</span>
+           -fno-builtin \             <span class="c"># do not replace puts/memcpy with builtins</span>
+           -Wall \
+           -mcmodel=medany \          <span class="c"># PC-relative ±2 GB addressing</span>
+           -mno-relax                 <span class="c"># disable linker relaxation (avoids GNU ld issues)</span>
+
+<span class="t">OPENSBI</span> = $(HOME)/eclipse-workspace/opensbi/build/platform/generic/firmware/fw_jump.elf
+
+<span class="t">all:</span> payload.elf
+
+<span class="t">payload.elf:</span> entry.o payload.o
+	$(<span class="t">LD</span>) -T linker.ld -nostdlib -o $@ $^
+
+<span class="t">entry.o:</span> entry.S
+	$(<span class="t">AS</span>) $(<span class="t">ASFLAGS</span>) -o $@ $&lt;
+
+<span class="t">payload.o:</span> payload.c
+	$(<span class="t">CC</span>) $(<span class="t">CFLAGS</span>) -c -o $@ $&lt;
+
+<span class="c"># Run with your locally-built OpenSBI</span>
+<span class="t">qemu-run:</span> all
+	qemu-system-riscv64 \
+		-machine virt \
+		-nographic \
+		-bios $(<span class="t">OPENSBI</span>) \
+		-kernel payload.elf
+
+<span class="c"># Same but paused — waiting for GDB on port 1234</span>
+<span class="t">qemu:</span> all
+	qemu-system-riscv64 \
+		-machine virt \
+		-nographic \
+		-bios $(<span class="t">OPENSBI</span>) \
+		-kernel payload.elf -s -S
+
+<span class="t">clean:</span>
+	rm -f *.o *.elf
+
+<span class="k">.PHONY:</span> all clean qemu qemu-run</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="run">Build &amp; Run</h2>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">1</span><h3>Create the project directory</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">cd ~/eclipse-workspace/riscv-bare-metal-qemu</span>
+<span class="g">mkdir opensbi_payload</span>
+<span class="cm"># Copy the 5 source files into this directory</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">2</span><h3>Build the payload</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">cd opensbi_payload</span>
+<span class="g">make</span>
+<span class="cm"># Verify entry point — must be 0x80200000</span>
+<span class="g">riscv64-unknown-elf-readelf -h payload.elf | grep Entry</span>
+<span class="cm"># Entry point address: 0x80200000</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><span class="step-num">3</span><h3>Run</h3></div>
+  <div class="step-bd">
+    <div class="code-wrap">
+      <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+      <pre><span class="g">make qemu-run</span>
+<span class="cm"># Press Ctrl-A X to quit when done</span></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="output">Expected Output</h2>
+
+<div class="terminal">
+<span class="dim">OpenSBI v1.8.1-38-g6d5b2b9b</span><br>
+<span class="dim">   ____                    _____ ____ _____</span><br>
+<span class="dim">  / __ \                  / ____|  _ \_   _|</span><br>
+<span class="dim">  ... [banner] ...</span><br>
+<span class="dim">Boot HART ISA Extensions  : sstc, zicntr, ...</span><br>
+<span class="blue">Domain0 Next Address      : 0x0000000080200000</span><br>
+<br>
+########################################<br>
+#   OpenSBI Payload Demo               #<br>
+#   S-mode under real OpenSBI          #<br>
+########################################<br>
+  Hart ID : 0x0000000000000000<br>
+  DTB     : 0x0000000082200000<br>
+<br>
+[---- SBI Base Extension (0x10) ----]<br>
+  SBI Spec Version : 3.0<br>
+  Implementation   : OpenSBI<br>
+  OpenSBI Version  : 1.8<br>
+  mvendorid        : 0x0000000000000000<br>
+  marchid          : 0x0000000000000000<br>
+  Extensions       : TIME IPI RFENCE HSM SRST<br>
+<br>
+[---- SBI Calling Convention Comparison ----]<br>
+  Your zsbl.S (legacy):          a7=0x00, a0=timer_val<br>
+  OpenSBI standard (TIME ext):   a7=0x54494D45, a6=0, a0=timer_val<br>
+  On sstc hardware: write stimecmp directly, no SBI call needed<br>
+<br>
+[---- SBI Timer / sstc Extension Demo ----]<br>
+  sstc present — writing stimecmp (CSR 0x14D) directly<br>
+  Interrupt fires as STI (scause interrupt code 5)<br>
+  Waiting for 3 timer interrupts...<br>
+<span class="hi">[IRQ] Timer #1  time=0x000000000052DA69</span><br>
+<span class="hi">[IRQ] Timer #2  time=0x00000000009F494D</span><br>
+<span class="hi">[IRQ] Timer #3  time=0x0000000000EBBCEB</span><br>
+  3 timer interrupts received.<br>
+<br>
+########################################<br>
+#   Demo complete. System halted.       #<br>
+########################################
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="sstc-deep">sstc Extension — Deep Dive</h2>
+
+<p>The <code>sstc</code> extension (Supervisor-mode Timer Comparison) allows S-mode to schedule timer interrupts without an SBI ecall. Understanding how it interacts with OpenSBI is important for real hardware work.</p>
+
+<table class="ann">
+  <tr><th>Feature</th><th>Without sstc</th><th>With sstc (QEMU virt)</th></tr>
+  <tr><td>Arm timer</td><td>ecall to SBI TIME ext (EID 0x54494D45)</td><td>Write stimecmp CSR (0x14D) directly from S-mode</td></tr>
+  <tr><td>OpenSBI role</td><td>Writes mtimecmp, enables MTIE, injects STIP via sip.SSIP</td><td>Sets MENVCFG.STCE=1 at boot — then stays out of the way</td></tr>
+  <tr><td>Interrupt code</td><td>scause code 1 (SSI — Software Interrupt)</td><td>scause code 5 (STI — Timer Interrupt)</td></tr>
+  <tr><td>Clear interrupt</td><td>Write sip.SSIP = 0 (csrc sip, bit 1)</td><td>Write stimecmp to a future value — clears automatically</td></tr>
+  <tr><td>MIDELEG bit 5</td><td>STIE not delegated — OpenSBI forwards via SSIP</td><td>STI fires directly in S-mode via stimecmp</td></tr>
+</table>
+
+<div class="note">
+  <strong>OpenSBI banner shows:</strong> <code>Boot HART MIDELEG : 0x0000000000001666</code>. Bit 5 (STIE) is <em>not</em> set in MIDELEG — normally this would mean timer interrupts cannot be delegated to S-mode. But with <code>sstc</code>, delegation is bypassed entirely: <code>stimecmp</code> fires STI directly in S-mode without going through M-mode at all.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="csr-map">CSR Quick Reference</h2>
+
+<table class="ann">
+  <tr><th>CSR</th><th>Number</th><th>Access</th><th>Purpose in This Project</th></tr>
+  <tr><td>stvec</td><td>0x105</td><td>S-mode R/W</td><td>S-mode trap vector address. Set to _strap_vector in entry.S.</td></tr>
+  <tr><td>sstatus</td><td>0x100</td><td>S-mode R/W</td><td>Bit 1 (SIE) = global S-mode interrupt enable. Must be 1 for any interrupt to fire.</td></tr>
+  <tr><td>sie</td><td>0x104</td><td>S-mode R/W</td><td>Per-interrupt enable. Bit 5 (STIE) enables Supervisor Timer Interrupts.</td></tr>
+  <tr><td>sip</td><td>0x144</td><td>S-mode R/W</td><td>Pending interrupt bits. Bit 5 (STIP) set by hardware when time &gt;= stimecmp.</td></tr>
+  <tr><td>scause</td><td>0x142</td><td>S-mode R/O</td><td>Set by CPU on trap. Bit 63=interrupt type, bits[62:0]=cause code.</td></tr>
+  <tr><td>sepc</td><td>0x141</td><td>S-mode R/W</td><td>Saved PC of the instruction that was interrupted. sret returns here.</td></tr>
+  <tr><td>stimecmp</td><td>0x14D</td><td>S-mode R/W</td><td>sstc extension. Timer fires (STI) when time CSR &gt;= stimecmp value.</td></tr>
+  <tr><td>time</td><td>0xC01</td><td>S-mode R/O</td><td>Read-only alias of mtime. Always accessible from S-mode on QEMU virt.</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="eclipse-debug">Eclipse CDT Debugger</h2>
+
+<p>With the payload running correctly from the command line, the next step is full source-level debugging inside Eclipse CDT — single-stepping through <code>entry.S</code>, <code>payload.c</code>, and even into OpenSBI's own C source. The approach uses QEMU's built-in GDB server (<code>-S -s</code>) and Eclipse's <strong>GDB Hardware Debugging</strong> launcher.</p>
+
+<div class="note success">
+  <strong>What you get:</strong> Single-step through assembly and C, live register/CSR watching, breakpoints on SBI ecalls, and the timer interrupt firing live in the debugger — all the way from the MROM reset vector to "Demo complete."
+</div>
+
+<!-- ─── QEMU debug script ─── -->
+<h3 id="debug-qemu-script">Step 1 — Create the QEMU Debug Launch Script</h3>
+
+<p>QEMU's <code>-S</code> flag freezes the CPU at reset before executing a single instruction. <code>-s</code> opens a GDB server on <code>localhost:1234</code>. Create a permanent script for this:</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">terminal</span><span class="code-lang">bash</span></div>
+  <pre><span class="g">cat</span> &gt; ~/eclipse-workspace/opensbi/opensbi_payload/debug_qemu.sh &lt;&lt; <span class="s">'EOF'</span>
+<span class="k">#!/bin/bash</span>
+qemu-system-riscv64 \
+    -machine virt \
+    -nographic \
+    -bios ~/eclipse-workspace/opensbi/build/platform/generic/firmware/fw_jump.elf \
+    -kernel ~/eclipse-workspace/opensbi/opensbi_payload/payload.elf \
+    <span class="hi">-S -s</span>
+<span class="s">EOF</span>
+<span class="g">chmod</span> +x ~/eclipse-workspace/opensbi/opensbi_payload/debug_qemu.sh</pre>
+</div>
+
+<div class="note warn">
+  <strong>Run this script in a terminal first</strong>, before launching the debugger in Eclipse. QEMU will freeze silently — that is correct. Eclipse then connects to port 1234.
+</div>
+
+<p>Each debug session: open a terminal, run <code>./debug_qemu.sh</code>, then click Debug in Eclipse. The <code>cat</code> and <code>chmod</code> commands above are one-time setup only.</p>
+
+<!-- ─── Import ─── -->
+<h3 id="debug-import">Step 2 — Import the Project into Eclipse CDT</h3>
+
+<p>If not already imported:</p>
+<ul>
+  <li><strong>File → Import → C/C++ → Existing Code as Makefile Project</strong></li>
+  <li>Set <strong>Existing Code Location</strong> to <code>~/eclipse-workspace/opensbi/opensbi_payload</code></li>
+  <li>Set <strong>Toolchain</strong> to <code>Cross GCC</code></li>
+  <li>Click Finish, then <strong>Project → Build Project</strong> to confirm <code>payload.elf</code> is produced</li>
+</ul>
+
+<div class="note">
+  The Debug button only activates once Eclipse sees a built binary. If it stays greyed out, click once on the project in the Project Explorer to select it, then try again.
+</div>
+
+<!-- ─── Config ─── -->
+<h3 id="debug-config">Step 3 — Create the Debug Configuration</h3>
+
+<p>Go to <strong>Run → Debug Configurations...</strong> → double-click <strong>GDB Hardware Debugging</strong> to create a new entry.</p>
+
+<table class="ann">
+  <tr><th>Tab</th><th>Field</th><th>Value</th></tr>
+  <tr><td>Main</td><td>Project</td><td><code>opensbi_payload</code></td></tr>
+  <tr><td>Main</td><td>C/C++ Application</td><td><code>opensbi/opensbi_payload/payload.elf</code> (full path)</td></tr>
+  <tr><td>Debugger</td><td>GDB Command</td><td><code>/usr/bin/gdb-multiarch</code></td></tr>
+  <tr><td>Debugger</td><td>Use remote target</td><td>✅ checked</td></tr>
+  <tr><td>Debugger</td><td>JTAG Device</td><td>Generic TCP/IP</td></tr>
+  <tr><td>Debugger</td><td>Host name</td><td><code>localhost</code></td></tr>
+  <tr><td>Debugger</td><td>Port number</td><td><code>1234</code></td></tr>
+</table>
+
+<div class="note warn">
+  <strong>Do not</strong> check <em>Load image</em> or <em>Load symbols</em> in the Startup tab — QEMU already has the ELF loaded. You only need to tell GDB where the symbol files are (done in the next step).
+</div>
+
+<!-- ─── Startup ─── -->
+<h3 id="debug-startup">Step 4 — Startup Tab Commands</h3>
+
+<p>This is the most critical section. In the <strong>Startup</strong> tab, fill in the two command boxes as follows:</p>
+
+<p><strong>Initialization Commands</strong> (runs before GDB connects):</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">GDB Initialization Commands</span></div>
+  <pre><span class="s">set arch riscv:rv64</span>
+<span class="s">set confirm off</span></pre>
+</div>
+
+<p><strong>Run Commands</strong> (runs after connection, before stepping):</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="code-fname">GDB Run Commands</span></div>
+  <pre><span class="c"># Load symbols for both ELFs so you can step through OpenSBI AND your payload</span>
+<span class="fn">symbol-file</span> /home/vikram/eclipse-workspace/opensbi/opensbi_payload/payload.elf
+<span class="fn">add-symbol-file</span> /home/vikram/eclipse-workspace/opensbi/build/platform/generic/firmware/fw_jump.elf <span class="n">0x80000000</span>
+
+<span class="c"># Hardware breakpoint — reliable even before memory is fully initialised</span>
+<span class="fn">hbreak</span> *<span class="n">0x80200000</span>
+<span class="fn">continue</span></pre>
+</div>
+
+<div class="note">
+  <strong>Why <code>hbreak</code> instead of <code>break _start</code>?</strong> GDB connects at <code>0x1000</code> (MROM reset vector). A software breakpoint on <code>_start</code> is resolved to an address but QEMU's memory model can make the <code>ebreak</code> write unreliable at that stage. A hardware breakpoint (<code>hbreak</code>) uses QEMU's internal watchpoint mechanism and fires reliably when PC reaches <code>0x80200000</code>.
+</div>
+
+<p>With both symbol files loaded, Eclipse will show source for OpenSBI's <code>fw_jump.S</code> / <code>sbi_init.c</code> during M-mode, and your <code>entry.S</code> / <code>payload.c</code> once execution crosses to <code>0x80200000</code>.</p>
+
+<!-- ─── Breakpoints ─── -->
+<h3 id="debug-breakpoints">Step 5 — Recommended Breakpoints</h3>
+
+<p>Set these before clicking Resume to observe the full boot-to-end flow:</p>
+
+<table class="ann">
+  <tr><th>Location</th><th>How to Set</th><th>What You See There</th></tr>
+  <tr><td><code>*0x80000000</code></td><td>Run → Add Breakpoint → Address</td><td>First instruction of OpenSBI fw_jump — CPU just left MROM</td></tr>
+  <tr><td><code>sbi_init</code></td><td>Right-click margin in sbi_init.c</td><td>OpenSBI C initialisation begins — PMP, UART, extension registration</td></tr>
+  <tr><td><code>_start</code> (entry.S)</td><td>Right-click margin in entry.S line 1</td><td>OpenSBI mret lands here — you are now in S-mode</td></tr>
+  <tr><td><code>payload_main</code></td><td>Right-click margin in payload.c</td><td>C entry point — hartid and DTB in a0/a1</td></tr>
+  <tr><td><code>demo_sbi_base</code></td><td>Right-click margin in payload.c</td><td>SBI BASE ecalls begin — watch a7=0x10</td></tr>
+  <tr><td><code>payload_trap_handler</code></td><td>Right-click margin in payload.c</td><td>Every timer IRQ lands here — inspect scause, sepc live</td></tr>
+  <tr><td><code>demo_timer</code></td><td>Right-click margin in payload.c</td><td>stimecmp arm sequence — watch sie bit 5 get set</td></tr>
+</table>
+
+<!-- ─── Expressions ─── -->
+<h3 id="debug-expressions">Step 6 — Expressions View</h3>
+
+<p>Open <strong>Window → Show View → Expressions</strong> and add these for live monitoring as you step:</p>
+
+<table class="ann">
+  <tr><th>Expression</th><th>Meaning</th></tr>
+  <tr><td><code>$pc</code></td><td>Current program counter</td></tr>
+  <tr><td><code>$a0</code></td><td>hartid at entry / SBI error return during ecalls</td></tr>
+  <tr><td><code>$a1</code></td><td>DTB address at entry / SBI value return during ecalls</td></tr>
+  <tr><td><code>$a7</code></td><td>SBI extension ID — watch it change: 0x10, 0x54494D45</td></tr>
+  <tr><td><code>$scause</code></td><td>Trap cause — timer interrupt = <code>0x8000000000000005</code></td></tr>
+  <tr><td><code>$sepc</code></td><td>PC that was interrupted when the timer fires</td></tr>
+  <tr><td><code>$sie</code></td><td>S-mode interrupt enable — bit 5 (STIE) must be 1 before timer fires</td></tr>
+  <tr><td><code>$sstatus</code></td><td>bit 1 (SIE) = global interrupt enable</td></tr>
+  <tr><td><code>timer_count</code></td><td>Your global counter — watch it increment 0 → 1 → 2 → 3</td></tr>
+</table>
+
+<!-- ─── Workflow ─── -->
+<h3 id="debug-workflow">Step 7 — Full Boot-to-End Step-Through Workflow</h3>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">1</div><h3>Start QEMU frozen</h3></div>
+  <div class="step-bd">
+    <p>In a terminal: <code>cd ~/eclipse-workspace/opensbi/opensbi_payload && ./debug_qemu.sh</code>. QEMU prints nothing and waits. Do not close this terminal.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">2</div><h3>Launch debugger in Eclipse</h3></div>
+  <div class="step-bd">
+    <p>Click <strong>Debug</strong>. Eclipse connects to port 1234, loads both symbol files, and runs <code>continue</code>. Execution stops at <code>0x80200000</code> (<code>_start</code>) automatically via the <code>hbreak</code> set in Run Commands.</p>
+    <div class="note">If you want to catch OpenSBI's very first instruction, add <code>hbreak *0x80000000</code> before the <code>continue</code> in Run Commands — it will stop there first, then you manually resume to reach <code>_start</code>.</div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">3</div><h3>Step through entry.S</h3></div>
+  <div class="step-bd">
+    <p>Use <strong>F5</strong> (step into) or <strong>F6</strong> (step over). You will see:</p>
+    <ul>
+      <li><code>la sp, _sstack_top</code> — watch <code>$sp</code> load to the stack top address</li>
+      <li><code>csrw stvec, t0</code> — watch <code>stvec</code> (if shown in registers view) get set to <code>_strap_vector</code></li>
+      <li><code>call payload_main</code> — step into to enter C code</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">4</div><h3>Step through payload_main and SBI ecalls</h3></div>
+  <div class="step-bd">
+    <p>In <code>payload.c</code>, step through <code>demo_sbi_base()</code>. Watch in Expressions view:</p>
+    <ul>
+      <li><code>$a7</code> becomes <code>0x10</code> (SBI_EXT_BASE) just before each <code>ecall</code></li>
+      <li><code>$a1</code> returns the spec version, impl ID, impl version</li>
+      <li>After the probe loop, all 5 extensions are confirmed present</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">5</div><h3>Watch the timer arm sequence</h3></div>
+  <div class="step-bd">
+    <p>Stepping through <code>demo_timer()</code>:</p>
+    <ul>
+      <li><code>sbi_set_timer()</code> fires — watch <code>$a7 = 0x54494D45</code> ("TIME")</li>
+      <li><code>sie |= (1&lt;&lt;5)</code> — watch <code>$sie</code> bit 5 go high in Expressions</li>
+      <li><code>sstatus |= (1&lt;&lt;1)</code> — global interrupts enabled, timer is now armed</li>
+      <li><code>wfi</code> — Eclipse pauses here. Click Resume. The timer fires.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">6</div><h3>Timer interrupt fires — inspect the trap</h3></div>
+  <div class="step-bd">
+    <p>Eclipse jumps to <code>_strap_vector</code> in <code>entry.S</code> (register save), then into <code>payload_trap_handler</code> in <code>payload.c</code>. At this moment check:</p>
+    <ul>
+      <li><code>$scause</code> = <code>0x8000000000000005</code> — bit 63 set (interrupt), code 5 (STI)</li>
+      <li><code>$sepc</code> = the PC that was executing when the timer fired (inside the <code>wfi</code> loop)</li>
+      <li><code>timer_count</code> increments to 1, then 2, then 3</li>
+    </ul>
+    <p>After the 3rd interrupt, <code>stimecmp</code> is pushed to <code>0xFFFFFFFFFFFFFFFF</code> and STIE is cleared — the timer disarms and execution returns to <code>payload_main</code>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-hd"><div class="step-num">7</div><h3>Program ends</h3></div>
+  <div class="step-bd">
+    <p>Execution falls through to the final <code>while(1) wfi</code> loop. Confirm <code>timer_count == 3</code> in Expressions. The demo is complete.</p>
+  </div>
+</div>
+
+<h3>Common Debug Issues</h3>
+<table class="ann" style="font-size:.86rem">
+  <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+  <tr><td>Debug button stays greyed out</td><td>No binary found or project not selected</td><td>Build the project first; click the project once in Project Explorer to select it</td></tr>
+  <tr><td>Code runs straight through, doesn't stop</td><td><code>hbreak</code> not in Run Commands, or connected after QEMU already ran</td><td>Ensure <code>hbreak *0x80200000</code> + <code>continue</code> is in Startup → Run Commands; restart QEMU first</td></tr>
+  <tr><td>"Remote 'g' packet reply is too long"</td><td>GDB register set mismatch</td><td>Add <code>set arch riscv:rv64</code> to Initialization Commands</td></tr>
+  <tr><td>No source shown for OpenSBI functions</td><td>OpenSBI source not indexed by Eclipse</td><td>File → Open File → browse to <code>opensbi/lib/sbi/sbi_init.c</code> manually, or add opensbi as a linked folder in the project</td></tr>
+  <tr><td>Hangs at <code>wfi</code> during single-step</td><td>Expected — <code>wfi</code> sleeps until an interrupt</td><td>Use <strong>Resume</strong> (F8) to continue past <code>wfi</code> until the timer interrupt fires</td></tr>
+  <tr><td>Breakpoint on <code>_start</code> not hit</td><td>Software breakpoint unreliable before memory init</td><td>Use <code>hbreak *0x80200000</code> (hardware breakpoint) instead</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2 id="troubleshoot">Troubleshooting</h2>
+
+<table class="ann" style="font-size:.86rem">
+  <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+  <tr><td>QEMU prints nothing, hangs immediately</td><td>fw_jump.elf entry point at 0x0 (FW_TEXT_START not patched)</td><td>Patch firmware/objects.mk. Run <code>readelf -h fw_jump.elf | grep Entry</code> — must show 0x80000000.</td></tr>
+  <tr><td>OpenSBI banner, then hangs with no payload output</td><td>payload.elf not at 0x80200000, or FW_JUMP_ADDR mismatch</td><td>Run <code>readelf -h payload.elf | grep Entry</code> — must show 0x80200000.</td></tr>
+  <tr><td>Build error: unsupported ISA subset 'zicsr'</td><td>Toolchain older than GCC 12 doesn't accept _zicsr as separate extension</td><td>Remove <code>_zicsr</code> suffix: use <code>-march=rv64imac</code></td></tr>
+  <tr><td>Build error: unrecognized CSR 'stimecmp'</td><td>GCC 10.x doesn't know the sstc extension</td><td>Use raw CSR number: <code>csrw 0x14D, %0</code> (already done in this project)</td></tr>
+  <tr><td>Timer hangs — "Waiting for 3 interrupts..." never completes</td><td>STIE not set in sie, or sstatus.SIE=0</td><td>Verify both <code>sie |= (1&lt;&lt;5)</code> and <code>sstatus |= (1&lt;&lt;1)</code> execute before wfi</td></tr>
+  <tr><td>[EXC] scause=0x5 — load access fault in UART or timer code</td><td>Reading CLINT MMIO (0x200BFF8) from S-mode — blocked by PMP</td><td>Use <code>csrr %0, time</code> CSR instead of direct MMIO</td></tr>
+  <tr><td>Timer interrupt fires as SSI (code 1) not STI (code 5)</td><td>QEMU build without sstc, or OpenSBI did not set MENVCFG.STCE</td><td>The SSI fallback path in payload_trap_handler handles this automatically</td></tr>
+  <tr><td>GDB breakpoint at _start not hit</td><td>GDB connected but payload.elf not loaded as symbol file</td><td>In GDB: <code>file payload.elf</code>, then <code>add-symbol-file payload.elf 0x80200000</code></td></tr>
+</table>
+
+</main>
+</div>
+
+<footer>
+  RISC-V Bare-Metal on QEMU &nbsp;·&nbsp;
+  <a href="index.html">Home</a> &nbsp;·&nbsp;
+  <a href="https://github.com/vwire/riscv-bare-metal-qemu">GitHub</a> &nbsp;·&nbsp;
+  Built with riscv64-unknown-elf · OpenSBI v1.8 · QEMU virt
+</footer>
+
+</body>
+</html>

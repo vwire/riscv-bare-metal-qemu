@@ -4,145 +4,123 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RISC-V Bare-Metal on QEMU</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --dark:   #1f2937;
-    --teal:   #0f766e;
-    --teal2:  #134e4a;
-    --light:  #f0fdf4;
-    --code:   #f0f4f8;
-    --muted:  #6b7280;
-    --border: #d1d5db;
-    --text:   #374151;
-    --yellow: #fbbf24;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f9fafb; color: var(--text); }
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --surf2:   #1c2128;
+  --border:  #30363d;
+  --bord2:   #21262d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --green2:  #238636;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --amber:   #e3b341;
+  --orange:  #ffa657;
+  --red:     #f85149;
+  --mono:    'IBM Plex Mono', monospace;
+  --serif:   'DM Serif Display', Georgia, serif;
+  --sans:    'Inter', system-ui, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:15px;line-height:1.6}
 
-  header {
-    background: linear-gradient(135deg, var(--dark) 0%, #134e4a 100%);
-    color: white; padding: 60px 24px 48px;
-    text-align: center;
-  }
-  header .badge {
-    display: inline-block; background: var(--yellow); color: #1a1a1a;
-    font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px;
-    letter-spacing: 1px; margin-bottom: 16px;
-  }
-  header h1 { font-size: 2.6rem; font-weight: 800; margin-bottom: 12px; }
-  header p  { font-size: 1.1rem; color: #9ca3af; max-width: 640px; margin: 0 auto 28px; }
-  .header-links a {
-    display: inline-block; margin: 6px;
-    padding: 10px 22px; border-radius: 8px; font-weight: 600;
-    font-size: 0.95rem; text-decoration: none; transition: opacity .2s;
-  }
-  .header-links a:hover { opacity: .85; }
-  .btn-primary  { background: var(--teal);  color: white; }
-  .btn-outline  { background: transparent; color: white; border: 2px solid rgba(255,255,255,.4); }
+header{
+  background:linear-gradient(150deg,#061426 0%,#0d1117 50%,#160a26 100%);
+  border-bottom:1px solid var(--border);
+  padding:72px 24px 56px;text-align:center;
+  position:relative;overflow:hidden;
+}
+header::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 70% 50% at 50% 0%,rgba(63,185,80,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.badge{display:inline-block;background:rgba(63,185,80,.1);border:1px solid var(--green2);color:var(--green);font-family:var(--mono);font-size:.72rem;font-weight:600;padding:4px 14px;border-radius:20px;letter-spacing:.06em;margin-bottom:20px}
+header h1{font-family:var(--serif);font-size:clamp(2rem,5vw,3.2rem);font-weight:400;letter-spacing:-.01em;margin-bottom:14px;line-height:1.15}
+header h1 em{color:var(--green);font-style:normal}
+header p{font-size:1.05rem;color:var(--muted);max-width:640px;margin:0 auto 28px;line-height:1.75}
+.hlinks a{display:inline-block;margin:5px;padding:10px 22px;border-radius:6px;font-weight:600;font-size:.9rem;text-decoration:none;transition:opacity .15s}
+.hlinks a:hover{opacity:.85}
+.btn-g{background:var(--green2);color:#fff;border:1px solid var(--green)}
+.btn-o{background:transparent;color:var(--text);border:1px solid var(--border)}
 
-  nav {
-    background: white; border-bottom: 1px solid var(--border);
-    display: flex; justify-content: center; gap: 0; flex-wrap: wrap;
-    position: sticky; top: 0; z-index: 50;
-  }
-  nav a {
-    padding: 14px 20px; font-size: .9rem; font-weight: 600;
-    color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent;
-    transition: all .2s;
-  }
-  nav a:hover, nav a.active { color: var(--teal); border-bottom-color: var(--teal); }
+nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:center;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+nav a{padding:13px 18px;font-size:.85rem;font-weight:600;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;transition:color .15s,border-color .15s}
+nav a:hover{color:var(--text)}
+nav a.active{color:var(--green);border-bottom-color:var(--green)}
 
-  .container { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
-  h2 { font-size: 1.7rem; color: var(--dark); margin-bottom: 8px; }
-  h3 { font-size: 1.15rem; color: var(--teal2); margin: 28px 0 8px; }
-  p  { line-height: 1.7; margin-bottom: 12px; }
+.container{max-width:1020px;margin:0 auto;padding:56px 24px}
 
-  .project-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 32px 0; }
-  @media(max-width:640px){ .project-grid { grid-template-columns: 1fr; } }
+h2{font-family:var(--serif);font-weight:400;font-size:1.65rem;color:var(--text);margin-bottom:10px}
+h3{font-size:1rem;font-weight:600;color:var(--blue);margin:24px 0 8px}
+p{color:#c9d1d9;line-height:1.75;margin-bottom:12px}
 
-  .card {
-    background: white; border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden; transition: box-shadow .2s;
-  }
-  .card:hover { box-shadow: 0 8px 32px rgba(0,0,0,.10); }
-  .card-header {
-    background: var(--dark); color: white; padding: 20px 24px;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .card-header .icon {
-    width: 42px; height: 42px; border-radius: 8px;
-    background: var(--teal); display: flex; align-items: center;
-    justify-content: center; font-size: 1.3rem; flex-shrink: 0;
-  }
-  .card-header h3 { color: white; margin: 0; font-size: 1rem; }
-  .card-header p  { color: #9ca3af; font-size: .82rem; margin: 2px 0 0; }
-  .card-body { padding: 20px 24px; }
-  .card-body ul { padding-left: 18px; margin: 8px 0 16px; }
-  .card-body li { margin-bottom: 6px; line-height: 1.5; font-size: .93rem; }
-  .card-body .tag {
-    display: inline-block; background: var(--code); color: var(--teal2);
-    font-size: .78rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
-    font-family: monospace; margin: 2px;
-  }
-  .card-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-  .card-links a {
-    padding: 8px 16px; border-radius: 6px; font-size: .85rem;
-    font-weight: 600; text-decoration: none; transition: opacity .2s;
-  }
-  .card-links a:hover { opacity: .85; }
-  .link-primary { background: var(--teal); color: white; }
-  .link-secondary { background: var(--code); color: var(--dark); }
+.flow{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:22px 28px;font-family:var(--mono);font-size:.81rem;line-height:2.1;margin:24px 0}
+.flow .addr{color:var(--amber)}
+.flow .arr{color:var(--green)}
+.flow .dim{color:var(--muted)}
+.flow .hi{color:var(--blue);font-weight:600}
 
-  .stack-diagram {
-    background: var(--dark); color: white; border-radius: 12px;
-    padding: 28px 32px; margin: 32px 0; font-family: monospace; font-size: .9rem;
-    line-height: 1.9;
-  }
-  .stack-diagram .addr  { color: #f9d71c; }
-  .stack-diagram .arrow { color: #34d399; }
-  .stack-diagram .note  { color: #9ca3af; }
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px;margin:32px 0}
 
-  .prereq-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; margin: 24px 0; }
-  .prereq-card {
-    background: white; border: 1px solid var(--border); border-radius: 10px;
-    padding: 18px 20px;
-  }
-  .prereq-card .name { font-weight: 700; color: var(--dark); font-size: .95rem; }
-  .prereq-card .pkg  { font-family: monospace; font-size: .82rem; color: var(--teal); background: var(--code); padding: 2px 6px; border-radius: 4px; }
-  .prereq-card p { font-size: .85rem; color: var(--muted); margin: 6px 0 0; line-height: 1.5; }
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.card:hover{border-color:var(--green2);box-shadow:0 4px 24px rgba(63,185,80,.08)}
 
-  .code-block {
-    background: var(--dark); color: #e2e8f0; border-radius: 10px;
-    padding: 20px 24px; margin: 16px 0; font-family: 'Courier New', monospace;
-    font-size: .88rem; line-height: 1.7; overflow-x: auto; position: relative;
-  }
-  .code-block .comment { color: #6b7280; }
-  .code-block .cmd     { color: #34d399; }
+.card-hd{background:var(--surf2);border-bottom:1px solid var(--border);padding:18px 20px;display:flex;align-items:center;gap:12px}
+.card-icon{width:36px;height:36px;border-radius:8px;background:var(--green2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;color:#fff;flex-shrink:0}
+.icon-p2{background:#6e40c9}
+.icon-p3{background:#b45309}
 
-  .callout {
-    border-left: 4px solid var(--teal); background: var(--light);
-    padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 20px 0;
-    font-size: .92rem; line-height: 1.6;
-  }
-  .callout.warn { border-left-color: #f59e0b; background: #fffbeb; }
+.card-hd-text h3{margin:0;font-size:.95rem;font-weight:600;color:var(--text)}
+.card-hd-text p{margin:2px 0 0;font-size:.8rem;color:var(--muted)}
+.card-body{padding:18px 20px}
+.card-body ul{padding-left:18px;margin:8px 0 14px}
+.card-body li{margin-bottom:5px;font-size:.88rem;color:#c9d1d9;line-height:1.55}
+.ctags{margin:12px 0 16px;display:flex;flex-wrap:wrap;gap:5px}
+.ct{font-family:var(--mono);font-size:.72rem;background:var(--bg);border:1px solid var(--bord2);color:var(--muted);padding:2px 8px;border-radius:4px}
+.ct.g{border-color:var(--green2);color:var(--green);background:rgba(63,185,80,.07)}
+.ct.p{border-color:#6e40c9;color:var(--purple);background:rgba(188,140,255,.07)}
+.ct.a{border-color:#9e6a03;color:var(--amber);background:rgba(227,179,65,.07)}
 
-  footer {
-    background: var(--dark); color: #9ca3af; text-align: center;
-    padding: 32px 24px; font-size: .88rem; margin-top: 60px;
-  }
-  footer a { color: #34d399; text-decoration: none; }
+.card-links{display:flex;gap:8px;flex-wrap:wrap}
+.card-links a{padding:7px 14px;border-radius:6px;font-size:.83rem;font-weight:600;text-decoration:none;transition:opacity .15s}
+.card-links a:hover{opacity:.85}
+.cl-pri{background:var(--green2);color:#fff;border:1px solid var(--green)}
+.cl-sec{background:var(--surf2);color:var(--text);border:1px solid var(--border)}
+
+.prereq-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+.prereq{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.prereq .name{font-weight:600;font-size:.9rem;color:var(--text);margin-bottom:4px}
+.prereq .pkg{font-family:var(--mono);font-size:.78rem;color:var(--green);background:var(--bg);border:1px solid var(--bord2);padding:1px 6px;border-radius:4px;display:inline-block;margin-bottom:6px}
+.prereq p{font-size:.82rem;color:var(--muted);margin:0;line-height:1.5}
+
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:var(--mono);font-size:.81rem;line-height:1.75;overflow-x:auto;color:var(--text);margin:14px 0}
+pre .g{color:var(--green)}
+pre .cm{color:var(--muted);font-style:italic}
+code{font-family:var(--mono);font-size:.84em;background:var(--surf2);border:1px solid var(--bord2);padding:1px 6px;border-radius:4px;color:var(--orange)}
+
+.note{border-left:3px solid var(--green);background:rgba(63,185,80,.06);padding:12px 16px;border-radius:0 6px 6px 0;margin:16px 0;font-size:.88rem;color:#c9d1d9;line-height:1.7}
+
+footer{background:var(--surface);border-top:1px solid var(--border);text-align:center;padding:28px 24px;font-size:.85rem;color:var(--muted)}
+footer a{color:var(--green);text-decoration:none}
 </style>
 </head>
 <body>
 
 <header>
   <div class="badge">RISC-V · QEMU · BARE METAL</div>
-  <h1>RISC-V Bare-Metal on QEMU</h1>
-  <p>Two complete projects — from a 5-instruction reset vector to a two-stage boot loader with S-mode timer interrupts. Full source, documented, Eclipse-debuggable.</p>
-  <div class="header-links">
-    <a href="https://github.com/vwire/riscv-bare-metal-qemu" class="btn-primary">⭐ View on GitHub</a>
-    <a href="project1.html" class="btn-outline">Project 1 — Bare Metal</a>
-    <a href="project2.html" class="btn-outline">Project 2 — ZSBL + Supervisor</a>
+  <h1>RISC-V Bare-Metal<br>on <em>QEMU</em></h1>
+  <p>Three complete projects — from a 5-instruction reset vector to an S-mode payload running under real OpenSBI firmware. Full source, Eclipse-debuggable, documented line by line.</p>
+  <div class="hlinks">
+    <a href="https://github.com/vwire/riscv-bare-metal-qemu" class="btn-g">⭐ View on GitHub</a>
+    <a href="project1.html" class="btn-o">Project 1 — Bare Metal</a>
+    <a href="project2.html" class="btn-o">Project 2 — ZSBL + Supervisor</a>
+    <a href="project3.html" class="btn-o">Project 3 — OpenSBI</a>
   </div>
 </header>
 
@@ -150,177 +128,196 @@
   <a href="index.html" class="active">Home</a>
   <a href="project1.html">Bare Metal</a>
   <a href="project2.html">ZSBL + Supervisor</a>
+  <a href="project3.html">OpenSBI Payload</a>
   <a href="reset-vector.html">Reset Vector</a>
 </nav>
 
 <div class="container">
 
-  <h2>About This Repository</h2>
-  <p>This repository contains two self-contained RISC-V bare-metal projects that run on <strong>QEMU virt</strong>. No OS, no external firmware dependencies for Project 1. Both projects are fully debuggable step-by-step in <strong>Eclipse CDT</strong> via GDB hardware debugging.</p>
+<h2>About This Repository</h2>
+<p>Three self-contained RISC-V bare-metal projects that run on <strong>QEMU virt</strong>. Each project builds on the previous, progressing from raw M-mode assembly to a full S-mode payload running under production OpenSBI firmware. No OS. Fully debuggable in <strong>Eclipse CDT</strong>.</p>
 
-  <!-- Boot chain diagram -->
-  <div class="stack-diagram">
-    <div><span class="note">── QEMU virt boot chain ────────────────────────────────────</span></div>
-    <div><span class="addr">0x1000 </span> MROM stub (5 instructions, hardcoded by QEMU)</div>
-    <div>          <span class="arrow">↓  loads kernel_entry from 0x1018, jumps to it</span></div>
-    <div><span class="addr">0x80000000 </span> <strong>Project 1:</strong> _start → main  (M-mode, -bios none)</div>
-    <div>          <span class="arrow">↓  or</span></div>
-    <div><span class="addr">0x80000000 </span> <strong>Project 2:</strong> zsbl.S  (M-mode ZSBL, -bios zsbl.elf)</div>
-    <div>          <span class="arrow">↓  mret with MPP=S</span></div>
-    <div><span class="addr">0x80200000 </span> <strong>Project 2:</strong> supervisor_main()  (S-mode, SBI timer)</div>
-  </div>
+<div class="flow">
+<div><span class="dim">── QEMU virt boot chain ────────────────────────────────────────────────────</span></div>
+<div><span class="addr">0x1000      </span>MROM reset vector <span class="dim">(5 instructions, hardcoded by QEMU)</span></div>
+<div>            <span class="arr">↓  loads kernel_entry from 0x1018, jumps to it</span></div>
+<div><span class="addr">0x80000000  </span><span class="hi">Project 1:</span> _start → main()  <span class="dim">(-bios none, pure M-mode)</span></div>
+<div>            <span class="arr">── or ──</span></div>
+<div><span class="addr">0x80000000  </span><span class="hi">Project 2:</span> zsbl.S  <span class="dim">(M-mode hand-written SBI, -bios zsbl.elf)</span></div>
+<div>            <span class="arr">↓  mret with MPP=S</span></div>
+<div><span class="addr">0x80200000  </span><span class="hi">Project 2:</span> supervisor_main()  <span class="dim">(S-mode, CLINT legacy SBI timer)</span></div>
+<div>            <span class="arr">── or ──</span></div>
+<div><span class="addr">0x80000000  </span><span class="hi">Project 3:</span> fw_jump.elf  <span class="dim">(real OpenSBI built from source, -bios)</span></div>
+<div>            <span class="arr">↓  mret with MPP=S</span></div>
+<div><span class="addr">0x80200000  </span><span class="hi">Project 3:</span> payload_main()  <span class="dim">(S-mode, SBI BASE queries, stimecmp timer)</span></div>
+</div>
 
-  <!-- Project cards -->
-  <div class="project-grid">
+<!-- Project cards -->
+<div class="grid">
 
-    <div class="card">
-      <div class="card-header">
-        <div class="icon">①</div>
-        <div>
-          <h3>Bare Metal QEMU</h3>
-          <p>Simplest possible RV64I bare-metal</p>
-        </div>
-      </div>
-      <div class="card-body">
-        <ul>
-          <li>3 files: <code>main.S</code>, <code>linker.ld</code>, <code>Makefile</code></li>
-          <li>Stack setup, arithmetic, 5-iteration loop</li>
-          <li>Eclipse CDT GDB Hardware Debug step-through</li>
-          <li>No C runtime, no OS, no OpenSBI</li>
-        </ul>
-        <div>
-          <span class="tag">RV64I</span>
-          <span class="tag">M-mode</span>
-          <span class="tag">-bios none</span>
-          <span class="tag">QEMU virt</span>
-        </div>
-        <div class="card-links">
-          <a href="project1.html" class="link-primary">Read Guide →</a>
-          <a href="https://github.com/vwire/riscv-bare-metal-qemu/tree/main/bare_metal_qemu" class="link-secondary">Source Code</a>
-        </div>
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-icon">①</div>
+      <div class="card-hd-text">
+        <h3>Bare Metal QEMU</h3>
+        <p>Simplest possible RV64I bare-metal</p>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-header">
-        <div class="icon">②</div>
-        <div>
-          <h3>ZSBL + Supervisor</h3>
-          <p>Two-stage boot with SBI timer interrupts</p>
-        </div>
+    <div class="card-body">
+      <ul>
+        <li>3 files: <code>main.S</code>, <code>linker.ld</code>, <code>Makefile</code></li>
+        <li>Stack setup, arithmetic (10+20=30), 5-iteration loop</li>
+        <li>Eclipse CDT GDB Hardware Debug step-through</li>
+        <li>No C runtime, no OS, no OpenSBI</li>
+      </ul>
+      <div class="ctags">
+        <span class="ct g">RV64I</span>
+        <span class="ct g">M-mode</span>
+        <span class="ct">-bios none</span>
+        <span class="ct">QEMU virt</span>
       </div>
-      <div class="card-body">
-        <ul>
-          <li>6 files: assembler ZSBL + C supervisor</li>
-          <li>M-mode → S-mode via <code>mret</code></li>
-          <li>SBI ecall interface (SET_TIMER)</li>
-          <li>3 timer interrupts via CLINT + STIP injection</li>
-        </ul>
-        <div>
-          <span class="tag">RV64IMAC</span>
-          <span class="tag">M+S-mode</span>
-          <span class="tag">SBI</span>
-          <span class="tag">CLINT</span>
-        </div>
-        <div class="card-links">
-          <a href="project2.html" class="link-primary">Read Guide →</a>
-          <a href="https://github.com/vwire/riscv-bare-metal-qemu/tree/main/zsbl_supervisor" class="link-secondary">Source Code</a>
-        </div>
+      <div class="card-links">
+        <a href="project1.html" class="cl-pri">Read Guide →</a>
+        <a href="https://github.com/vwire/riscv-bare-metal-qemu/tree/main/bare_metal_qemu" class="cl-sec">Source Code</a>
       </div>
-    </div>
-
-  </div>
-
-  <!-- Prerequisites -->
-  <h2 style="margin-top:48px">Prerequisites</h2>
-  <p>You need these three tools installed before cloning either project.</p>
-
-  <div class="prereq-grid">
-    <div class="prereq-card">
-      <div class="name">RISC-V Toolchain</div>
-      <div class="pkg">riscv64-unknown-elf-*</div>
-      <p>GCC cross-compiler, binutils assembler and linker for bare-metal RISC-V targets.</p>
-    </div>
-    <div class="prereq-card">
-      <div class="name">QEMU</div>
-      <div class="pkg">qemu-system-riscv64</div>
-      <p>RISC-V system emulator. Version 6.x or later. Ships with most Linux distros.</p>
-    </div>
-    <div class="prereq-card">
-      <div class="name">GDB Multiarch</div>
-      <div class="pkg">gdb-multiarch</div>
-      <p>Required for Eclipse CDT hardware debug. Can also be used standalone from terminal.</p>
-    </div>
-    <div class="prereq-card">
-      <div class="name">Eclipse CDT</div>
-      <div class="pkg">eclipse-cdt (optional)</div>
-      <p>IDE for step-by-step debugging. Optional — <code>make qemu-run</code> works without it.</p>
     </div>
   </div>
 
-  <h3>Install on Ubuntu / Debian</h3>
-  <div class="code-block">
-<span class="comment"># QEMU and GDB</span>
-<span class="cmd">sudo apt update</span>
-<span class="cmd">sudo apt install qemu-system-misc gdb-multiarch make</span>
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-icon icon-p2">②</div>
+      <div class="card-hd-text">
+        <h3>ZSBL + Supervisor</h3>
+        <p>Two-stage boot with SBI timer interrupts</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <ul>
+        <li>6 files: assembler ZSBL + C supervisor</li>
+        <li>M-mode → S-mode transition via <code>mret</code></li>
+        <li>Hand-written SBI ecall (legacy SET_TIMER 0x00)</li>
+        <li>3 timer interrupts via CLINT + STIP injection</li>
+      </ul>
+      <div class="ctags">
+        <span class="ct g">RV64IMAC</span>
+        <span class="ct g">M+S-mode</span>
+        <span class="ct p">SBI legacy</span>
+        <span class="ct">CLINT</span>
+      </div>
+      <div class="card-links">
+        <a href="project2.html" class="cl-pri">Read Guide →</a>
+        <a href="https://github.com/vwire/riscv-bare-metal-qemu/tree/main/zsbl_supervisor" class="cl-sec">Source Code</a>
+      </div>
+    </div>
+  </div>
 
-<span class="comment"># RISC-V toolchain — two options:</span>
-
-<span class="comment"># Option A: distro package (easier, may be older)</span>
-<span class="cmd">sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf</span>
-
-<span class="comment"># Option B: SiFive prebuilt (recommended — matches this project)</span>
-<span class="comment"># Download from https://github.com/sifive/freedom-tools/releases</span>
-<span class="comment"># Extract and add bin/ to PATH in ~/.bashrc:</span>
-<span class="cmd">export PATH="/path/to/riscv64-unknown-elf-toolchain/bin:$PATH"</span></div>
-
-  <h3>Verify Installation</h3>
-  <div class="code-block">
-<span class="cmd">riscv64-unknown-elf-as --version</span>   <span class="comment"># GNU assembler 2.x</span>
-<span class="cmd">qemu-system-riscv64 --version</span>        <span class="comment"># QEMU emulator version 6.x or later</span>
-<span class="cmd">gdb-multiarch --version</span>               <span class="comment"># GNU gdb</span></div>
-
-  <!-- Quick start -->
-  <h2 style="margin-top:48px">Quick Start</h2>
-  <div class="code-block">
-<span class="comment"># Clone the repository</span>
-<span class="cmd">git clone https://github.com/vwire/riscv-bare-metal-qemu.git</span>
-<span class="cmd">cd riscv-bare-metal-qemu</span>
-
-<span class="comment"># ── Project 1: bare metal ──────────────────────────────</span>
-<span class="cmd">cd bare_metal_qemu</span>
-<span class="cmd">make qemu-run</span>          <span class="comment"># builds and runs — loops silently (no UART output)</span>
-<span class="comment"># Ctrl-A X to quit QEMU</span>
-
-<span class="comment"># ── Project 2: ZSBL + Supervisor ──────────────────────</span>
-<span class="cmd">cd ../zsbl_supervisor</span>
-<span class="cmd">make qemu-run</span>          <span class="comment"># builds and runs — prints full demo to terminal</span></div>
-
-  <div class="callout">
-    <strong>Expected output for Project 2:</strong><br><br>
-    ZSBL<br>
-    ########################################<br>
-    #&nbsp;&nbsp; RISC-V ZSBL + Supervisor Demo &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#<br>
-    ########################################<br>
-    &nbsp;&nbsp;Hart ID : 0x0000000000000000<br>
-    &nbsp;&nbsp;DTB&nbsp;&nbsp;&nbsp;&nbsp; : 0x0000000087E00000<br>
-    [---- Arithmetic Demo ----]<br>
-    [---- Memory Read/Write Demo ----]<br>
-    [---- Timer Interrupt Demo ----]<br>
-    [IRQ] Timer #1 &nbsp;mtime=0x...<br>
-    [IRQ] Timer #2 &nbsp;mtime=0x...<br>
-    [IRQ] Timer #3 &nbsp;mtime=0x...<br>
-    &nbsp;&nbsp;3 timer interrupts received.<br>
-    ########################################<br>
-    #&nbsp;&nbsp; Demo complete. System halted. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#<br>
-    ########################################
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-icon icon-p3">③</div>
+      <div class="card-hd-text">
+        <h3>OpenSBI Payload</h3>
+        <p>Real OpenSBI + SBI v1.0 S-mode demo</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <ul>
+        <li>Build OpenSBI v1.8 from source (<code>riscv64-linux-gnu-</code>)</li>
+        <li>SBI BASE queries: spec version, impl, extension probe</li>
+        <li>SBI TIME extension (0x54494D45) — correct SBI v1.0 API</li>
+        <li>sstc: write <code>stimecmp</code> directly from S-mode</li>
+      </ul>
+      <div class="ctags">
+        <span class="ct g">S-mode</span>
+        <span class="ct g">OpenSBI v1.8</span>
+        <span class="ct p">SBI v1.0</span>
+        <span class="ct a">sstc</span>
+      </div>
+      <div class="card-links">
+        <a href="project3.html" class="cl-pri">Read Guide →</a>
+        <a href="https://github.com/vwire/riscv-bare-metal-qemu/tree/main/opensbi_payload" class="cl-sec">Source Code</a>
+      </div>
+    </div>
   </div>
 
 </div>
 
+<!-- Prerequisites -->
+<h2 style="margin-top:52px">Prerequisites</h2>
+<p>Projects 1 and 2 need only the bare-metal toolchain, QEMU, and GDB. Project 3 additionally requires the Linux RISC-V toolchain to build OpenSBI from source.</p>
+
+<div class="prereq-grid">
+  <div class="prereq">
+    <div class="name">RISC-V Toolchain (bare-metal)</div>
+    <span class="pkg">riscv64-unknown-elf-*</span>
+    <p>GCC cross-compiler for bare-metal. Used by all 3 projects for the payload/app code.</p>
+  </div>
+  <div class="prereq">
+    <div class="name">RISC-V Toolchain (Linux)</div>
+    <span class="pkg">riscv64-linux-gnu-*</span>
+    <p>Required only for Project 3 to build OpenSBI from source. Supports PIE relocation.</p>
+  </div>
+  <div class="prereq">
+    <div class="name">QEMU</div>
+    <span class="pkg">qemu-system-riscv64</span>
+    <p>RISC-V system emulator. Version 6.x or later. Ships with most Linux distros.</p>
+  </div>
+  <div class="prereq">
+    <div class="name">GDB Multiarch</div>
+    <span class="pkg">gdb-multiarch</span>
+    <p>Required for Eclipse CDT hardware debug and standalone GDB sessions.</p>
+  </div>
+</div>
+
+<h3>Install on Ubuntu / Debian</h3>
+<pre>
+<span class="cm"># QEMU and GDB</span>
+<span class="g">sudo apt update</span>
+<span class="g">sudo apt install qemu-system-misc gdb-multiarch make</span>
+
+<span class="cm"># Linux RISC-V toolchain (Project 3 — OpenSBI build only)</span>
+<span class="g">sudo apt install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu</span>
+
+<span class="cm"># Bare-metal toolchain — Option A: distro package</span>
+<span class="g">sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf</span>
+
+<span class="cm"># Option B: SiFive prebuilt GCC 10.2 (matches this project)</span>
+<span class="cm"># Download from https://github.com/sifive/freedom-tools/releases</span>
+<span class="g">export PATH="/path/to/riscv64-unknown-elf-toolchain/bin:$PATH"</span></pre>
+
+<h2 style="margin-top:52px">Quick Start</h2>
+<pre>
+<span class="cm"># Clone</span>
+<span class="g">git clone https://github.com/vwire/riscv-bare-metal-qemu.git</span>
+<span class="g">cd riscv-bare-metal-qemu</span>
+
+<span class="cm"># ── Project 1: bare metal ─────────────────────────────────────</span>
+<span class="g">cd bare_metal_qemu && make qemu-run</span>
+<span class="cm"># Loops silently (no UART output) — Ctrl-A X to quit</span>
+
+<span class="cm"># ── Project 2: ZSBL + Supervisor ──────────────────────────────</span>
+<span class="g">cd ../zsbl_supervisor && make qemu-run</span>
+<span class="cm"># Prints full demo output and 3 timer interrupts</span>
+
+<span class="cm"># ── Project 3: OpenSBI Payload ────────────────────────────────</span>
+<span class="cm"># Step 1: build OpenSBI from source (one-time setup)</span>
+<span class="g">git clone https://github.com/riscv-software-src/opensbi.git ~/eclipse-workspace/opensbi</span>
+<span class="g">cd ~/eclipse-workspace/opensbi</span>
+<span class="g">sed -i 's/firmware-genflags-y += -DFW_TEXT_START=0x0/firmware-genflags-y += -DFW_TEXT_START=0x80000000/' \
+    firmware/objects.mk</span>
+<span class="g">make CROSS_COMPILE=riscv64-linux-gnu- PLATFORM=generic \
+    FW_JUMP=y FW_JUMP_ADDR=0x80200000 -j$(nproc)</span>
+
+<span class="cm"># Step 2: build and run the S-mode payload</span>
+<span class="g">cd ~/eclipse-workspace/riscv-bare-metal-qemu/opensbi_payload && make qemu-run</span></pre>
+
+<div class="note">All three projects produce self-contained ELF files. No OS installation beyond the toolchain and QEMU.</div>
+
+</div><!-- container -->
+
 <footer>
-  <p>RISC-V Bare-Metal on QEMU &nbsp;·&nbsp; Source on <a href="https://github.com/vwire/riscv-bare-metal-qemu">GitHub</a></p>
-  <p style="margin-top:8px">Built with riscv64-unknown-elf toolchain · QEMU virt machine · Eclipse CDT</p>
+  RISC-V Bare-Metal on QEMU &nbsp;·&nbsp;
+  Source on <a href="https://github.com/vwire/riscv-bare-metal-qemu">GitHub</a>
+  &nbsp;·&nbsp; Built with riscv64-unknown-elf toolchain · QEMU virt · Eclipse CDT
 </footer>
 
 </body>
